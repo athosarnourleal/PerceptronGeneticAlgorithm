@@ -1,6 +1,6 @@
 #include <iostream>
 #include <ostream>
-#include "genalgNeuralNetwork.h"
+#include "headers/genalgNeuralNetwork.h"
 
 int main() {
 
