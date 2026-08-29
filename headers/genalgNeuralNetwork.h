@@ -2,11 +2,13 @@
 #define GENALGNEURALNETWORK_H
 
 #include <cassert>
+#include <cstdlib>
 #include <cstring>
+#include <iostream>
+// #include "randomPool.h"
 
 
 // --------------------------------------------------------------------------------------------------------------------- UTIL
-
 
 constexpr int absCompileTime(const int n) {
     if (n < 0) return -n;
@@ -14,10 +16,8 @@ constexpr int absCompileTime(const int n) {
     return n;
 }
 
-
 constexpr int powRecursion(const int a, const int n) {
     if (n == 1) return a;
-
     const int aux = powRecursion(a, n/2);
     return aux*aux;
 }
@@ -28,18 +28,16 @@ constexpr int powCompileTime(const int a, const int n) {
     return powRecursion(a, absCompileTime(n)-1) * a;
 }
 
-
 inline void swap(int &x, int &y) noexcept {
     x = y ^ x;
     y = x ^ y;
     x = y ^ x;
 }
 
-
 // --------------------------------------------------------------------------------------------------------------------- NEURAL NETWORK
 
 
-constexpr int LAYER_SIZES[] = {784, 16, 16, 10};// only even numbered layers are allowed*
+constexpr int LAYER_SIZES[] = {1, 6, 6, 1};
 constexpr int LAYER_NUMBER = 4;
 
 constexpr int calculateWeightNumber() {
@@ -94,27 +92,30 @@ inline float quick_dotProduct(const float* vector1, const  float* vector2, const
     return dotProductUnroll2(vector1, vector2, size-1) + (vector1[size-1]*vector2[size-1]);
 }
 
-inline void runNeuralNetwork(const float* inputs,const NeuralNetwork &brain) {
+inline void runNeuralNetwork(const float* inputs,const NeuralNetwork *brain) {
 
     memcpy(brainExecutionBuffer, inputs, LAYER_SIZES[0] * sizeof(float)); // load input into buffer
 
-    int weightPointer = 0;
+    int weightPointer = 0, biasPointer = 0;
     int curBufferStart = BIGGEST_LAYER_SIZE, lastBufferStart = 0; // selects which half of the buffer is used
 
     for (int layer = 1; layer < LAYER_NUMBER-1; layer++) {
-
         for (int neuron = 0; neuron < LAYER_SIZES[layer]; neuron++) {
-            brainExecutionBuffer[curBufferStart + neuron] = dotProductUnroll2(&brainExecutionBuffer[lastBufferStart], &brain.weights[weightPointer], LAYER_SIZES[layer-1]);
+            brainExecutionBuffer[curBufferStart + neuron] = brain->bias[biasPointer] + quick_dotProduct(&brainExecutionBuffer[lastBufferStart], &brain->weights[weightPointer], LAYER_SIZES[layer-1]);
             weightPointer += LAYER_SIZES[layer-1]; // go to the set of weights of the next neuron
         }
-
+        biasPointer++;
         swap(curBufferStart, lastBufferStart);
     }
+
     std::cout << weightPointer << std::endl;
 }
 
 
 // --------------------------------------------------------------------------------------------------------------------- GENALG
+
+
+// DNA MANIPULATION //
 
 constexpr int GENE_NUMBER = WEIGHT_NUMBER + BIAS_NUMBER; // number of genes
 
@@ -122,17 +123,15 @@ constexpr int GENE_DATA_BITS = 6;
 constexpr int GENE_DATA_CAPACITY = 6;
 constexpr float MIN_VAL = -4, MAX_VAL = 4;
 
-constexpr int POPULATION_SIZE = 0;
-
 constexpr int SIZEOF_GENE_STRUCT = 1; // 1 byte
 struct gene { // 1 byte
     int data : GENE_DATA_BITS;
     int : 8 - GENE_DATA_BITS; // padding
 };
 
-// gene decoding //
 
-constexpr float INV_GENE_CAPACITY = 1.0f / (  powCompileTime(2, GENE_DATA_BITS) - 1  );
+constexpr int GENE_CAPACITY = powCompileTime(2, GENE_DATA_BITS);
+constexpr float INV_GENE_CAPACITY = 1.0f / (  GENE_CAPACITY - 1.0f  );
 inline float decodeGeneValue(const struct gene gene) {
     return MIN_VAL + static_cast<float>(gene.data) * (MAX_VAL - MIN_VAL) * INV_GENE_CAPACITY;
 }
@@ -150,26 +149,39 @@ inline const gene *decodeDNA(const gene *DNA, float *destination, int len) {
     return genePointer;// returns last position
 }
 
-inline void loadBrain(NeuralNetwork &brain, const gene* dna) {
-    dna = decodeDNA(dna, brain.weights, WEIGHT_NUMBER); // load weights + skip
-    decodeDNA(dna, brain.bias, BIAS_NUMBER); // load bias
+inline void loadBrainFromDNA(NeuralNetwork *brain, const gene* dna) {
+    dna = decodeDNA(dna, brain->weights, WEIGHT_NUMBER); // load weights + skip
+    decodeDNA(dna, brain->bias, BIAS_NUMBER); // load bias
 }
 
-// population creating //
+// POPULATION MANIPULATING //
 
-inline gene* createIndividual() {
-    gene* individual = new gene[GENE_NUMBER];
+constexpr int POPULATION_SIZE = 100;
 
+struct element {
+    gene dna[GENE_NUMBER];
+};
+
+// inline RandomPool random_number_pool(GENE_NUMBER * POPULATION_SIZE * 5 + 5); // preloads 5 generations and extra 4 ints
+
+inline void createIndividual(element* individual) {
     for (int i = 0; i < GENE_NUMBER; i++) {
-        //individual[i].data;
+        individual->dna[i].data = rand() % GENE_CAPACITY;
+    }
+}
+
+inline element* createPopulation() {
+    element* population = new element[POPULATION_SIZE];
+
+    for (int i = 0; i < POPULATION_SIZE; i++) {
+        createIndividual(&population[i]);
     }
 
-    return individual;
+    return population;
 }
 
+// EVOLUTION //
 
-// evolution //
-
-// TODO: evolutionary data
+// TODO: evolutionary operators + evolutionary function
 
 #endif // GENALGNEURALNETWORK_H
