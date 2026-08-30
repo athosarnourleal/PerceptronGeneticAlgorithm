@@ -115,8 +115,6 @@ inline void runNeuralNetwork(const float* inputs,NeuralNetwork *brain) {
     }
 
     memcpy(brain->output, &brainExecutionBuffer[lastBufferStart], LAYER_SIZES[LAYER_NUMBER-1] * sizeof(float)); // load results into output
-
-    std::cout << weightPointer << std::endl;
 }
 
 
