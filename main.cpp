@@ -12,7 +12,8 @@ static float get_solution(const int x) {
 
 
 int main() {
-    float* inputs = new float[2];
+    // BASIC TEST
+
     srand(time(nullptr));
 
     element* indv = new element;
@@ -22,16 +23,18 @@ int main() {
     loadBrainFromDNA(brain, indv->dna);
 
     // setup training env
-    inputs[0] = rand() % 1000;
-    const float expectedOutput = get_solution(inputs[0]);
+    float* inputs = new float;
+    *inputs = rand() % 1000;
+
+    const float expectedOutput = get_solution(*inputs);
 
     // run
-    // runNeuralNetwork(inputs, brain);
+    runNeuralNetwork(inputs, brain);
 
     cout << "expected: " << expectedOutput << " --- recieved: " << brain->output[0] << endl;
 
     // deallocate
-    delete [] inputs;
+    delete inputs;
     delete indv;
     delete brain;
 }
