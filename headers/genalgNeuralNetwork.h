@@ -2,11 +2,10 @@
 #define GENALGNEURALNETWORK_H
 
 #include <cassert>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
-#include <iostream>
-// #include "randomPool.h"
-
+// #include <iostream>
 
 // --------------------------------------------------------------------------------------------------------------------- UTIL
 
@@ -34,11 +33,22 @@ inline void swap(int &x, int &y) noexcept {
     x = y ^ x;
 }
 
+// TODO: update random engine
+inline int randomInt() {
+    return rand();
+}
+inline int randomInt(const int &range) {
+    return rand() % range;
+}
+constexpr float INVERSE_RAND_MAX = 4.65661e-10;
+inline float randomDouble() {
+    return rand() * INVERSE_RAND_MAX;
+}
+
 // --------------------------------------------------------------------------------------------------------------------- NEURAL NETWORK
 
-
-constexpr int LAYER_SIZES[] = {1, 6, 6, 1};
-constexpr int LAYER_NUMBER = 4;
+constexpr int LAYER_SIZES[] = {1, 1};
+constexpr int LAYER_NUMBER = 2;
 
 constexpr int calculateWeightNumber() {
     int weightNum = 0;
@@ -72,6 +82,7 @@ struct NeuralNetwork {// size = (WEIGHT_NUMBER+BIAS_NUMBER+LAYER_SIZES[LAYER_NUM
     float weights[WEIGHT_NUMBER];
     float bias[BIAS_NUMBER];
     float output[LAYER_SIZES[LAYER_NUMBER-1]];
+    int biggestOutput;
 };
 
 inline float dotProductUnroll2(const float* vector1, const  float* vector2, const int size) {
@@ -96,8 +107,7 @@ inline float ReLU(const float u) {
     return (u > 0) * u; // calculates "(u > 0) ? u : -0";
 }
 
-inline void runNeuralNetwork(const float* inputs,NeuralNetwork *brain) {
-
+inline void runNeuralNetwork(const float *inputs, NeuralNetwork *brain) {
     memcpy(brainExecutionBuffer, inputs, LAYER_SIZES[0] * sizeof(float)); // load input into buffer
 
     int weightPointer = 0, biasPointer = 0;
@@ -126,8 +136,9 @@ inline void runNeuralNetwork(const float* inputs,NeuralNetwork *brain) {
 constexpr int GENE_NUMBER = WEIGHT_NUMBER + BIAS_NUMBER; // number of genes
 
 constexpr int GENE_DATA_BITS = 6;
-constexpr int GENE_DATA_CAPACITY = 6;
-constexpr float MIN_VAL = -4, MAX_VAL = 4;
+
+constexpr float MIN_WEIGHT_VAL = -4, MAX_WEIGHT_VAL = 4; // values for translation
+constexpr float MIN_BIAS_VAL = -6, MAX_BIAS_VAL = 6; // values for translation
 
 constexpr int SIZEOF_GENE_STRUCT = 1; // 1 byte
 struct gene { // 1 byte
@@ -135,21 +146,20 @@ struct gene { // 1 byte
     int : 8 - GENE_DATA_BITS; // padding
 };
 
-
 constexpr int GENE_CAPACITY = powCompileTime(2, GENE_DATA_BITS);
 constexpr float INV_GENE_CAPACITY = 1.0f / (  GENE_CAPACITY - 1.0f  );
-inline float decodeGeneValue(const struct gene gene) {
-    return MIN_VAL + static_cast<float>(gene.data) * (MAX_VAL - MIN_VAL) * INV_GENE_CAPACITY;
+inline float decodeGeneValue(const gene gene, const float min, const float max) {
+    return min + static_cast<float>(gene.data) * (max - min) * INV_GENE_CAPACITY;
 }
 
 inline void loadBrainFromDNA(NeuralNetwork *brain, const gene* dna) {
     int i;
 
     for (i = 0; i < WEIGHT_NUMBER; i++) { // load into weights
-        brain->weights[i] = decodeGeneValue(*dna++);
+        brain->weights[i] = decodeGeneValue(*dna++, MIN_WEIGHT_VAL, MAX_WEIGHT_VAL);
     }
     for (i = 0; i < BIAS_NUMBER; i++) { // load into weights
-        brain->bias[i] = decodeGeneValue(*dna++);
+        brain->bias[i] = decodeGeneValue(*dna++, MIN_BIAS_VAL, MAX_BIAS_VAL);
     }
 }
 
@@ -159,11 +169,12 @@ constexpr int POPULATION_SIZE = 100;
 
 struct element {
     gene dna[GENE_NUMBER];
+    float score;
 };
 
 inline void createIndividual(element* individual) {
     for (int i = 0; i < GENE_NUMBER; i++) {
-        individual->dna[i].data = rand() % GENE_CAPACITY;
+        individual->dna[i].data = randomInt(GENE_CAPACITY);
     }
 }
 
@@ -179,7 +190,59 @@ inline element* createPopulation() {
 
 // EVOLUTION //
 
-// TODO: evolutionary operators + evolutionary function
+inline element roulette(const element* population, const float scoreSum) {
+    const float threshold = randomDouble() * scoreSum;
+
+    float aux = population[0].score;
+    int index = 0;
+    while (aux < threshold) {
+        aux += population[index++].score;
+    }
+
+    return population[index];
+}
+
+constexpr float INVERSE_U_RANDOM_MAX = 0.00390625; // INVERSE_U_RANDOM_MAX = 1 / pow(2, 8);
+union u_random {
+    uint8_t data[4]; // 8 * 4 bits (32  bits)
+    int total; // 32 bits
+};
+
+constexpr float mutationChance = 0.5; // 0% - 100%
+inline void mutate(gene* dna) {
+    u_random randomVal; // divide random number in 4 parts to reduce number of "rand()" used
+
+    for (int i = 0; i < GENE_NUMBER; i++) {
+        if (i % 4 == 0) randomVal.total = randomInt(); // reset random when all numbers are used
+
+        for (int j = 0; j < GENE_DATA_BITS; j++) {
+            if (randomVal.data[i % 4]*INVERSE_U_RANDOM_MAX < mutationChance) {
+                dna[i].data ^= 0x01 << j; // flip bit
+            }
+        }
+    }
+}
+
+inline void crossover(const gene* parent1, const gene* parent2, gene* child) {
+    const int cut = randomInt(GENE_NUMBER);
+
+    for (int i = 0; i < GENE_NUMBER; i++) {
+        child[i].data = (i < cut) ? parent1[i].data : parent2[i].data;
+    }
+}
+
+// EVALUATION //
+
+inline int findBest(const element* pop) {
+    int best = 0;
+    for (int i = 1; i < POPULATION_SIZE; i++) {
+        if (pop[best].score < pop[i].score) {
+            best = i;
+        }
+    }
+
+    return best;
+}
 
 
 #endif // GENALGNEURALNETWORK_H
