@@ -33,7 +33,7 @@ inline void swap(int &x, int &y) noexcept {
     x = y ^ x;
 }
 
-// TODO: update random engine
+// random number generating // TODO: update random engine
 inline int randomInt() {
     return rand();
 }
@@ -44,6 +44,16 @@ constexpr float INVERSE_RAND_MAX = 4.65661e-10;
 inline float randomDouble() {
     return rand() * INVERSE_RAND_MAX;
 }
+
+// compacted random value
+
+constexpr float INVERSE_COMPACTED_RANDOM_MAX = 0.00390625;
+union compacted_random {
+    uint8_t data[4]; // 8 * 4 bits (32  bits)
+    int total; // 32 bits
+};
+static compacted_random randomVal; // divide random number in 4 parts to reduce number of "rand()" used
+
 
 // --------------------------------------------------------------------------------------------------------------------- NEURAL NETWORK
 
@@ -154,7 +164,6 @@ inline float decodeGeneValue(const gene gene, const float min, const float max) 
 
 inline void loadBrainFromDNA(NeuralNetwork *brain, const gene* dna) {
     int i;
-
     for (i = 0; i < WEIGHT_NUMBER; i++) { // load into weights
         brain->weights[i] = decodeGeneValue(*dna++, MIN_WEIGHT_VAL, MAX_WEIGHT_VAL);
     }
@@ -171,7 +180,6 @@ struct element {
     gene dna[GENE_NUMBER];
     float score;
 };
-
 inline void createIndividual(element* individual) {
     for (int i = 0; i < GENE_NUMBER; i++) {
         individual->dna[i].data = randomInt(GENE_CAPACITY);
@@ -202,21 +210,14 @@ inline element roulette(const element* population, const float scoreSum) {
     return population[index];
 }
 
-constexpr float INVERSE_U_RANDOM_MAX = 0.00390625; // INVERSE_U_RANDOM_MAX = 1 / pow(2, 8);
-union u_random {
-    uint8_t data[4]; // 8 * 4 bits (32  bits)
-    int total; // 32 bits
-};
-
 constexpr float mutationChance = 0.5; // 0% - 100%
 inline void mutate(gene* dna) {
-    u_random randomVal; // divide random number in 4 parts to reduce number of "rand()" used
 
     for (int i = 0; i < GENE_NUMBER; i++) {
         if (i % 4 == 0) randomVal.total = randomInt(); // reset random when all numbers are used
 
         for (int j = 0; j < GENE_DATA_BITS; j++) {
-            if (randomVal.data[i % 4]*INVERSE_U_RANDOM_MAX < mutationChance) {
+            if (randomVal.data[i % 4]*INVERSE_COMPACTED_RANDOM_MAX < mutationChance) {
                 dna[i].data ^= 0x01 << j; // flip bit
             }
         }
@@ -230,6 +231,21 @@ inline void crossover(const gene* parent1, const gene* parent2, gene* child) {
         child[i].data = (i < cut) ? parent1[i].data : parent2[i].data;
     }
 }
+
+static gene childBuffer[GENE_NUMBER];
+
+inline void generation(element* curGeneration, gene* lastGenerationBuffer) {
+
+    // save generation DNAs in buffer
+    for (int i = 0; i < POPULATION_SIZE; i++) {
+        memcpy(&lastGenerationBuffer[i * GENE_NUMBER], curGeneration[i].dna, GENE_NUMBER * sizeof(gene));
+    }
+
+    for (int i = 0; i < POPULATION_SIZE; i++) {
+
+    }
+}
+
 
 // EVALUATION //
 
