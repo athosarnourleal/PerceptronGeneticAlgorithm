@@ -198,7 +198,7 @@ inline element* createPopulation() {
 
 // EVOLUTION //
 
-inline element roulette(const element* population, const float scoreSum) {
+inline int roulette(const element* population, const float scoreSum) {
     const float threshold = randomDouble() * scoreSum;
 
     float aux = population[0].score;
@@ -207,43 +207,56 @@ inline element roulette(const element* population, const float scoreSum) {
         aux += population[index++].score;
     }
 
-    return population[index];
+    return index;
+}
+
+
+// create buffer in cache memory --- TODO: check if it isn't too big for cache when applying Neural Networks to .minst
+static element childDnaBuffer;
+
+inline void crossover(const gene* parent1, const gene* parent2) {
+    const int cut = randomInt(GENE_NUMBER);
+
+    for (int i = 0; i < GENE_NUMBER; i++) {
+        childDnaBuffer.dna[i].data = (i < cut) ? parent1[i].data : parent2[i].data;
+    }
 }
 
 constexpr float mutationChance = 0.5; // 0% - 100%
-inline void mutate(gene* dna) {
+inline void mutate() {
 
     for (int i = 0; i < GENE_NUMBER; i++) {
         if (i % 4 == 0) randomVal.total = randomInt(); // reset random when all numbers are used
 
         for (int j = 0; j < GENE_DATA_BITS; j++) {
             if (randomVal.data[i % 4]*INVERSE_COMPACTED_RANDOM_MAX < mutationChance) {
-                dna[i].data ^= 0x01 << j; // flip bit
+                childDnaBuffer.dna[i].data ^= 0x01 << j; // flip bit
             }
         }
     }
 }
 
-inline void crossover(const gene* parent1, const gene* parent2, gene* child) {
-    const int cut = randomInt(GENE_NUMBER);
-
-    for (int i = 0; i < GENE_NUMBER; i++) {
-        child[i].data = (i < cut) ? parent1[i].data : parent2[i].data;
-    }
-}
-
-static gene childBuffer[GENE_NUMBER];
-
 inline void generation(element* curGeneration, gene* lastGenerationBuffer) {
 
+    int scoreSum = 0;
     // save generation DNAs in buffer
     for (int i = 0; i < POPULATION_SIZE; i++) {
         memcpy(&lastGenerationBuffer[i * GENE_NUMBER], curGeneration[i].dna, GENE_NUMBER * sizeof(gene));
+
+        scoreSum += curGeneration[i].score;
     }
 
     for (int i = 0; i < POPULATION_SIZE; i++) {
+        crossover(
+            &lastGenerationBuffer[roulette(curGeneration, scoreSum) * GENE_NUMBER], // select parent1
+            &lastGenerationBuffer[roulette(curGeneration, scoreSum) * GENE_NUMBER] // select parent2
+        );
+        mutate();
 
+        memcpy(curGeneration[i].dna, childDnaBuffer.dna, GENE_NUMBER * sizeof(gene)); // save result from buffer to the next generation
     }
+
+    // OBS: the scores are NOT meant to be reset in generation().
 }
 
 

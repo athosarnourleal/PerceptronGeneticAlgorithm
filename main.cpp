@@ -12,6 +12,8 @@ static float getSolution(const int x) {
 
 constexpr int batchSize = 1000;
 
+// TODO: create library for Dataset Managment
+
 static float* trainingBatch = new float[batchSize*2];
 
 static float* createTrainingBatch(float *batch) {
@@ -45,13 +47,13 @@ int main() {
     element* bestFromEachGeneration = new element[EPOCHS * GENE_NUMBER];
 
     gene* lastGenerationBuffer = new gene[GENE_NUMBER * POPULATION_SIZE];
-    element* population = createPopulation();
+    element* curGeneration = createPopulation();
     NeuralNetwork* brains = new NeuralNetwork[POPULATION_SIZE];
 
     for (int epoch = 0; epoch < EPOCHS; epoch++) {
         // load brain
         for (int j = 0; j < POPULATION_SIZE; j++) {
-            loadBrainFromDNA(&brains[j], population[j].dna);
+            loadBrainFromDNA(&brains[j], curGeneration[j].dna);
         }
 
         // get batch
@@ -59,16 +61,18 @@ int main() {
 
         // execute and evaluate population
         for (int j = 0; j < POPULATION_SIZE; j++) {
-            runByBatch(&brains[j], &population[j]);
+            runByBatch(&brains[j], &curGeneration[j]);
         }
 
         // generate next population
-        
+        generation(curGeneration, lastGenerationBuffer);
 
         // get best from last generation
-        const int bestElementIndex = findBest(population);
+        const int bestElementIndex = findBest(curGeneration);
         memcpy(&bestFromEachGeneration[epoch].dna, &lastGenerationBuffer[bestElementIndex],GENE_NUMBER); // save best's DNA
-        bestFromEachGeneration[epoch].score = population[bestElementIndex].score; // save best's score
+        bestFromEachGeneration[epoch].score = curGeneration[bestElementIndex].score; // save best's score
+
+        std::cout << "generation " << epoch << ":" << std::endl;
     }
 
     // get all time best
@@ -78,7 +82,7 @@ int main() {
 
 
     // deallocate
-    delete [] population;
+    delete [] curGeneration;
     delete [] brains;
     delete [] lastGenerationBuffer;
     delete [] trainingBatch;
