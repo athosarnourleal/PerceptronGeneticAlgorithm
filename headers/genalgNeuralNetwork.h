@@ -5,7 +5,6 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
-// #include <iostream>
 
 // --------------------------------------------------------------------------------------------------------------------- UTIL
 
@@ -45,16 +44,6 @@ inline float randomDouble() {
     return rand() * INVERSE_RAND_MAX;
 }
 
-// compacted random value
-
-constexpr float INVERSE_COMPACTED_RANDOM_MAX = 0.00390625;
-union compacted_random {
-    uint8_t data[4]; // 8 * 4 bits (32  bits)
-    int total; // 32 bits
-};
-static compacted_random randomVal; // divide random number in 4 parts to reduce number of "rand()" used
-
-
 // --------------------------------------------------------------------------------------------------------------------- NEURAL NETWORK
 
 constexpr int LAYER_SIZES[] = {1, 1};
@@ -86,13 +75,12 @@ constexpr int BIGGEST_LAYER_SIZE = getBiggestLayerSize();
 
 constexpr int WEIGHT_NUMBER = calculateWeightNumber(), BIAS_NUMBER = LAYER_NUMBER-1;
 
-inline float brainExecutionBuffer[BIGGEST_LAYER_SIZE * 2];
+inline float runBuffer[BIGGEST_LAYER_SIZE * 2];
 
-struct NeuralNetwork {// size = (WEIGHT_NUMBER+BIAS_NUMBER+LAYER_SIZES[LAYER_NUMBER-1])*__SIZEOF_FLOAT__ Bytes
+struct NeuralNetwork {
     float weights[WEIGHT_NUMBER];
     float bias[BIAS_NUMBER];
     float output[LAYER_SIZES[LAYER_NUMBER-1]];
-    int biggestOutput;
 };
 
 inline float dotProductUnroll2(const float* vector1, const  float* vector2, const int size) {
@@ -107,7 +95,7 @@ inline float dotProductUnroll2(const float* vector1, const  float* vector2, cons
     return sum1 + sum2;
 }
 
-inline float quick_dotProduct(const float* vector1, const  float* vector2, const int size) {
+inline float quickDotProduct(const float* vector1, const  float* vector2, const int size) {
     if (size % 2 == 0) return dotProductUnroll2(vector1, vector2, size);
 
     return dotProductUnroll2(vector1, vector2, size-1) + (vector1[size-1]*vector2[size-1]);
@@ -118,15 +106,20 @@ inline float ReLU(const float u) {
 }
 
 inline void runNeuralNetwork(const float *inputs, NeuralNetwork *brain) {
-    memcpy(brainExecutionBuffer, inputs, LAYER_SIZES[0] * sizeof(float)); // load input into buffer
+    memcpy(runBuffer, inputs, LAYER_SIZES[0] * sizeof(float)); // load input into buffer
 
     int weightPointer = 0, biasPointer = 0;
     int curBufferStart = BIGGEST_LAYER_SIZE, lastBufferStart = 0; // selects which half of the buffer is used
 
+    // run
     for (int layer = 1; layer < LAYER_NUMBER; layer++) {
         for (int neuron = 0; neuron < LAYER_SIZES[layer]; neuron++) {
-            brainExecutionBuffer[curBufferStart + neuron]
-                = ReLU(brain->bias[biasPointer] + quick_dotProduct(&brainExecutionBuffer[lastBufferStart], &brain->weights[weightPointer], LAYER_SIZES[layer-1]));
+            runBuffer[curBufferStart + neuron]
+               = brain->bias[biasPointer] + quickDotProduct(&runBuffer[lastBufferStart], &brain->weights[weightPointer], LAYER_SIZES[layer-1]);
+
+            if (layer < LAYER_NUMBER-1) {
+                runBuffer[curBufferStart + neuron] = ReLU(runBuffer[curBufferStart + neuron]);
+            }
 
             weightPointer += LAYER_SIZES[layer-1]; // go to the set of weights of the next neuron
         }
@@ -134,7 +127,7 @@ inline void runNeuralNetwork(const float *inputs, NeuralNetwork *brain) {
         swap(curBufferStart, lastBufferStart);
     }
 
-    memcpy(brain->output, &brainExecutionBuffer[lastBufferStart], LAYER_SIZES[LAYER_NUMBER-1] * sizeof(float)); // load results into output
+    memcpy(brain->output, &runBuffer[lastBufferStart], LAYER_SIZES[LAYER_NUMBER-1] * sizeof(float)); // load results into output
 }
 
 
@@ -145,55 +138,61 @@ inline void runNeuralNetwork(const float *inputs, NeuralNetwork *brain) {
 
 constexpr int GENE_NUMBER = WEIGHT_NUMBER + BIAS_NUMBER; // number of genes
 
-constexpr int GENE_DATA_BITS = 6;
+constexpr int GENE_DATA_BITS = 8;
 
 constexpr float MIN_WEIGHT_VAL = -4, MAX_WEIGHT_VAL = 4; // values for translation
 constexpr float MIN_BIAS_VAL = -6, MAX_BIAS_VAL = 6; // values for translation
 
 constexpr int SIZEOF_GENE_STRUCT = 1; // 1 byte
 struct gene { // 1 byte
-    int data : GENE_DATA_BITS;
+    unsigned int data : GENE_DATA_BITS;
     int : 8 - GENE_DATA_BITS; // padding
 };
 
 constexpr int GENE_CAPACITY = powCompileTime(2, GENE_DATA_BITS);
-constexpr float INV_GENE_CAPACITY = 1.0f / (  GENE_CAPACITY - 1.0f  );
+
+constexpr float CONVERSION_DENOMINATOR = 1.0f / (GENE_CAPACITY - 1.0f);
 inline float decodeGeneValue(const gene gene, const float min, const float max) {
-    return min + static_cast<float>(gene.data) * (max - min) * INV_GENE_CAPACITY;
+    return min + static_cast<float>(gene.data) * (max - min) * CONVERSION_DENOMINATOR;
 }
 
 inline void loadBrainFromDNA(NeuralNetwork *brain, const gene* dna) {
+
+    // std::cout << std::endl << "loading...: " << std::endl;
     int i;
     for (i = 0; i < WEIGHT_NUMBER; i++) { // load into weights
-        brain->weights[i] = decodeGeneValue(*dna++, MIN_WEIGHT_VAL, MAX_WEIGHT_VAL);
+        brain->weights[i] = decodeGeneValue(*dna, MIN_WEIGHT_VAL, MAX_WEIGHT_VAL);
+        dna++;
+        // std::cout << "weights: " << brain->weights[i] << std::endl;
     }
     for (i = 0; i < BIAS_NUMBER; i++) { // load into weights
-        brain->bias[i] = decodeGeneValue(*dna++, MIN_BIAS_VAL, MAX_BIAS_VAL);
+        brain->bias[i] = decodeGeneValue(*dna, MIN_BIAS_VAL, MAX_BIAS_VAL);
+        dna++;
+        // std::cout << "bias: " << brain->bias[i] << std::endl;
     }
 }
 
 // POPULATION MANIPULATING //
 
-constexpr int POPULATION_SIZE = 100;
+constexpr int POPULATION_SIZE = 2000;
 
 struct element {
     gene dna[GENE_NUMBER];
     float score;
 };
+
 inline void createIndividual(element* individual) {
     for (int i = 0; i < GENE_NUMBER; i++) {
         individual->dna[i].data = randomInt(GENE_CAPACITY);
     }
+    individual->score = static_cast<float>(RAND_MAX);
 }
 
-inline element* createPopulation() {
-    element* population = new element[POPULATION_SIZE];
+inline void createPopulation(element* population) {
 
     for (int i = 0; i < POPULATION_SIZE; i++) {
         createIndividual(&population[i]);
     }
-
-    return population;
 }
 
 // EVOLUTION //
@@ -222,24 +221,22 @@ inline void crossover(const gene* parent1, const gene* parent2) {
     }
 }
 
-constexpr float mutationChance = 0.5; // 0% - 100%
+constexpr float mutationChance = 0.1; // 0% - 100%
 inline void mutate() {
-
     for (int i = 0; i < GENE_NUMBER; i++) {
-        if (i % 4 == 0) randomVal.total = randomInt(); // reset random when all numbers are used
 
         for (int j = 0; j < GENE_DATA_BITS; j++) {
-            if (randomVal.data[i % 4]*INVERSE_COMPACTED_RANDOM_MAX < mutationChance) {
+            if (randomDouble() < mutationChance) {
                 childDnaBuffer.dna[i].data ^= 0x01 << j; // flip bit
             }
         }
     }
 }
 
+
 inline void generation(element* curGeneration, gene* lastGenerationBuffer) {
 
-    int scoreSum = 0;
-    // save generation DNAs in buffer
+    float scoreSum = 0;
     for (int i = 0; i < POPULATION_SIZE; i++) {
         memcpy(&lastGenerationBuffer[i * GENE_NUMBER], curGeneration[i].dna, GENE_NUMBER * sizeof(gene));
 
@@ -249,14 +246,64 @@ inline void generation(element* curGeneration, gene* lastGenerationBuffer) {
     for (int i = 0; i < POPULATION_SIZE; i++) {
         crossover(
             &lastGenerationBuffer[roulette(curGeneration, scoreSum) * GENE_NUMBER], // select parent1
-            &lastGenerationBuffer[roulette(curGeneration, scoreSum) * GENE_NUMBER] // select parent2
+            &lastGenerationBuffer[roulette(curGeneration, scoreSum) * GENE_NUMBER]  // select parent2
         );
+
         mutate();
 
         memcpy(curGeneration[i].dna, childDnaBuffer.dna, GENE_NUMBER * sizeof(gene)); // save result from buffer to the next generation
     }
 
-    // OBS: the scores are NOT meant to be reset in generation().
+    // OBS: the scores are NOT meant to be reset in generation(), since they will be overriden when running the neural network again
+}
+
+constexpr int ELITE_SIZE = POPULATION_SIZE*0.1;
+static int elite[ELITE_SIZE];
+
+inline void generationElitism(element* curGeneration, gene* lastGenerationBuffer) {
+
+    for (int i = 0; i < ELITE_SIZE; i++) {
+        elite[i] = i;
+    }
+
+    static float scoreSum = 0;
+    for (int i = 0; i < POPULATION_SIZE; i++) {
+        memcpy(&lastGenerationBuffer[i * GENE_NUMBER], curGeneration[i].dna, GENE_NUMBER * sizeof(gene));
+
+        scoreSum += curGeneration[i].score;
+
+        int j;
+        for (j = ELITE_SIZE-1; j >= 0; j--) {
+            if (curGeneration[i].score < curGeneration[elite[j]].score) {
+                j++;
+                break;
+            }
+        }
+        if (j < ELITE_SIZE) {
+            elite[j] = i;
+        }
+    }
+
+    static bool inElite = false;
+    for (int i = 0; i < POPULATION_SIZE; i++) {
+        inElite = false;
+        for (int j = 0; j < ELITE_SIZE; j++) {
+            if (i == elite[j]) inElite = true;
+        }
+        if (inElite) continue;
+
+
+        crossover(
+            &lastGenerationBuffer[roulette(curGeneration, scoreSum) * GENE_NUMBER], // select parent1
+            &lastGenerationBuffer[roulette(curGeneration, scoreSum) * GENE_NUMBER]  // select parent2
+        );
+
+        mutate();
+
+        memcpy(curGeneration[i].dna, childDnaBuffer.dna, GENE_NUMBER * sizeof(gene)); // save result from buffer to the next generation
+    }
+
+    // OBS: the scores are NOT meant to be reset in generation(), since they will be overriden when running the neural network again
 }
 
 
@@ -273,5 +320,15 @@ inline int findBest(const element* pop) {
     return best;
 }
 
+inline int findBestMinimizeError(const element* pop) {
+    int best = 0;
+    for (int i = 1; i < POPULATION_SIZE; i++) {
+        if (pop[i].score < pop[best].score) {
+            best = i;
+        }
+    }
+
+    return best;
+}
 
 #endif // GENALGNEURALNETWORK_H
