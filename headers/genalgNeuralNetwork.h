@@ -190,12 +190,6 @@ inline void createPopulation(element* population) {
     }
 }
 
-inline void transferDNA(gene* recipient, const gene* donor) {
-    for (int i = 0; i < GENE_NUMBER; i++) {
-        recipient[i] = donor[i];
-    }
-}
-
 // EVOLUTION //
 
 inline int roulette(const element *population, const float scoreSum) {
@@ -218,42 +212,8 @@ inline int roulette(const element *population, const float scoreSum) {
     return index;
 }
 
-constexpr int tournamentSize = POPULATION_SIZE * 0.1;
-inline int tournament(const element* population) {
-    int tournament[tournamentSize];
-
-    // create random roster
-    for (int i = 0; i < tournamentSize; i++) {
-        tournament[i] = randomInt(POPULATION_SIZE);
-    }
-
-    // get best from roster
-    int bestIndex = tournament[0];
-    float bestScore = population[bestIndex].score;
-    for (int i = 1; i < tournamentSize; i++) {
-        if (bestScore > population[tournament[i]].score) {
-            bestIndex = tournament[i];
-            bestScore = population[tournament[i]].score;
-        }
-    }
-
-    return bestIndex;
-}
-
 // create buffer in cache memory --- TODO: check if it isn't too big for cache when applying Neural Networks to .minst
 static element childDnaBuffer;
-
-inline void crossoverBytesOnly(const gene* parent1, const gene* parent2) {
-    const int cut = randomInt(GENE_NUMBER+1);
-
-    for (int i = 0; i < GENE_NUMBER; i++) {
-        if (i <= cut) {
-            childDnaBuffer.dna[i] = parent1[i];
-        } else {
-            childDnaBuffer.dna[i] = parent2[i];
-        }
-    }
-}
 
 constexpr gene filledGene = {.data = GENE_CAPACITY-1};
 
@@ -325,43 +285,12 @@ inline void generation(element* curGeneration, dna* lastGenerationBuffer) {
     // OBS: the scores are NOT meant to be reset in generation(), since they will be overriden when running the neural network again
 }
 
-// /* TODO: MAYBE LATER
-inline void generationTournament(element* curGeneration, dna* lastGenerationBuffer) {
-
-    for (int i = 0; i < POPULATION_SIZE; i++) {
-        memcpy(&lastGenerationBuffer[i].genes, curGeneration[i].dna, GENE_NUMBER * sizeof(gene));
-    }
-
-    for (int i = 0; i < POPULATION_SIZE; i++) {
-        crossover(
-            lastGenerationBuffer[tournament(curGeneration) * GENE_NUMBER].genes, // select parent1
-            lastGenerationBuffer[tournament(curGeneration) * GENE_NUMBER].genes  // select parent2
-        );
-
-        mutate();
-
-        memcpy(curGeneration[i].dna, childDnaBuffer.dna, GENE_NUMBER * sizeof(gene)); // save result from buffer to the next generation
-    }
-}
-// */
-
 // EVALUATION //
 
 inline int findBest(const element* pop) {
     int best = 0;
     for (int i = 1; i < POPULATION_SIZE; i++) {
         if (pop[best].score < pop[i].score) {
-            best = i;
-        }
-    }
-
-    return best;
-}
-
-inline int findBestMinimizeError(const element* pop) {
-    int best = 0;
-    for (int i = 1; i < POPULATION_SIZE; i++) {
-        if (pop[i].score < pop[best].score) {
             best = i;
         }
     }

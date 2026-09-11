@@ -99,8 +99,8 @@ public class Visualizer extends Canvas implements Runnable, KeyListener {
 
 		for (int i = 0; i < dataset.size()-1; i++) {
 
-			int curHeight = (int)map(dataset.get(i), minVal, maxVal, 0, H);
-			int nextHeight = (int)map(dataset.get(i+1), minVal, maxVal, 0, H);
+			int curHeight = (int)map(dataset.get(i), minVal, maxVal, 0, H-2);
+			int nextHeight = (int)map(dataset.get(i+1), minVal, maxVal, 0, H-2);
 
 
 			if (dataset.get(i+1) >= dataset.get(i)) {

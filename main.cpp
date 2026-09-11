@@ -43,11 +43,6 @@ static void evaluate(NeuralNetwork *brain, element *individual) {
 
     avgError = avgError * INV_BATCH_SIZE;
     individual->score = abs(1 / (avgError + 1));
-
-    // float error = abs(T_W - brain->weights[0]);
-    // error += abs(brain->bias[0] - T_B);
-    //
-    // individual->score = abs(1 / (abs(error) + 1));
 }
 
 constexpr int EPOCHS = 1000;
@@ -56,14 +51,13 @@ static element generationBackup[POPULATION_SIZE];
 
 
 int main() {
-    srand(42);
+    srand(32413422);
 
     element* bestFromEachGeneration = new element[EPOCHS * GENE_NUMBER];
 
     dna* lastGenerationBuffer = new dna[POPULATION_SIZE];
     element* curGeneration = new element[POPULATION_SIZE];
     createPopulation(curGeneration);
-
 
     NeuralNetwork* brains = new NeuralNetwork[POPULATION_SIZE];
     NeuralNetwork* exampleBrain = new NeuralNetwork;
@@ -89,12 +83,6 @@ int main() {
 
         // generate next population
         generation(curGeneration, lastGenerationBuffer);
-        //
-        // for (int i = 0; i < POPULATION_SIZE; i++) {
-        //     for (int j = 0; j < GENE_NUMBER; j++) {
-        //         assert(generationBackup[i].dna[j].data == lastGenerationBuffer[i].genes[j].data);
-        //     }
-        // }
 
         // get best from last generation
         const int bestElementIndex = findBest(curGeneration);
