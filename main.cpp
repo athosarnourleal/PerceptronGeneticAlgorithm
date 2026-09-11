@@ -11,59 +11,69 @@ static float getSolution(const int x) {
     return T_W * static_cast<float>(x) + T_B;
 }
 
-constexpr int BATCH_SIZE = 2000;
 
 // TODO: create library for Dataset Management
-static float* trainingBatch = new float[BATCH_SIZE*2];
+constexpr int BATCH_SIZE = 2000;
 
-constexpr int training_range = 100;
+static float* trainingBatch = new float[BATCH_SIZE*2];
+constexpr int training_range = 3000;
+
 static float* createTrainingBatch(float *batch) {
     for (int i = 0; i < BATCH_SIZE; i++) {
-        batch[i*2] = randomDouble() * training_range * 2 - training_range;
-        batch[i*2+1] = getSolution(batch[i]);
+        batch[i*2] = randomDouble()*training_range*2 - training_range;
+        if (randomDouble() >= 0.5) {
+            batch[i*2] *= -1;
+        }
+
+        batch[i*2+1] = getSolution(batch[i*2]);
     }
 
     return batch;
 }
 
-constexpr float errorMax = 1000000;
-
-static void runByBatch(NeuralNetwork *brain, element *individual) {
+constexpr float INV_BATCH_SIZE = 1.0f / static_cast<float>(BATCH_SIZE);
+static void evaluate(NeuralNetwork *brain, element *individual) {
     float avgError = 0;
-
     for (int i = 0; i < BATCH_SIZE; ++i) {
         // run
         runNeuralNetwork(&trainingBatch[i*2], brain);
 
-        // calculate absolute error
-        avgError += abs(trainingBatch[i*2+1] - brain->output[0]);
-
+        avgError += abs(trainingBatch[i*2 + 1] - brain->output[0]);
     }
-    avgError /= BATCH_SIZE;
 
-    // cout << "avgError: " << avgError << endl;
-    individual->score = (avgError >= errorMax) ? 0.0f : errorMax - avgError;
-    
-    // cout << "score: " << individual->score << endl;
+    avgError = avgError * INV_BATCH_SIZE;
+    individual->score = abs(1 / (avgError + 1));
+
+    // float error = abs(T_W - brain->weights[0]);
+    // error += abs(brain->bias[0] - T_B);
+    //
+    // individual->score = abs(1 / (abs(error) + 1));
 }
 
+constexpr int EPOCHS = 1000;
 
+static element generationBackup[POPULATION_SIZE];
 
-constexpr int EPOCHS = 4000;
 
 int main() {
-    /*
-    srand(time(nullptr));
+    srand(42);
 
     element* bestFromEachGeneration = new element[EPOCHS * GENE_NUMBER];
 
-    gene* lastGenerationBuffer = new gene[GENE_NUMBER * POPULATION_SIZE];
+    dna* lastGenerationBuffer = new dna[POPULATION_SIZE];
     element* curGeneration = new element[POPULATION_SIZE];
     createPopulation(curGeneration);
 
+
     NeuralNetwork* brains = new NeuralNetwork[POPULATION_SIZE];
+    NeuralNetwork* exampleBrain = new NeuralNetwork;
+
+    for (int i = 0 ; i < POPULATION_SIZE ; i++) {
+        generationBackup[i] = curGeneration[i];
+    }
 
     for (int epoch = 0; epoch < EPOCHS; epoch++) {
+
         // load brain
         for (int j = 0; j < POPULATION_SIZE; j++) {
             loadBrainFromDNA(&brains[j], curGeneration[j].dna);
@@ -74,11 +84,17 @@ int main() {
 
         // execute population
         for (int j = 0; j < POPULATION_SIZE; j++) {
-            runByBatch(&brains[j], &curGeneration[j]);
+            evaluate(&brains[j], &curGeneration[j]);
         }
 
         // generate next population
-        generationElitism(curGeneration, lastGenerationBuffer);
+        generation(curGeneration, lastGenerationBuffer);
+        //
+        // for (int i = 0; i < POPULATION_SIZE; i++) {
+        //     for (int j = 0; j < GENE_NUMBER; j++) {
+        //         assert(generationBackup[i].dna[j].data == lastGenerationBuffer[i].genes[j].data);
+        //     }
+        // }
 
         // get best from last generation
         const int bestElementIndex = findBest(curGeneration);
@@ -86,10 +102,12 @@ int main() {
         bestFromEachGeneration[epoch].score = curGeneration[bestElementIndex].score; // save best score
 
         std::cout << endl << "generation " << epoch << ": " << bestFromEachGeneration[epoch].score  << endl;
-
         if (epoch >= 1) {
             std::cout << "difference: " << (bestFromEachGeneration[epoch].score - bestFromEachGeneration[epoch-1].score) << endl;
         }
+        loadBrainFromDNA(exampleBrain, bestFromEachGeneration[epoch].dna);
+        cout << "weight: " << exampleBrain->weights[0] << endl;
+        cout << "bias: " << exampleBrain->bias[0] << endl << endl;
     }
 
     // get all time best
@@ -105,10 +123,11 @@ int main() {
 
     cout << endl << "first score: " << bestFromEachGeneration[0].score << endl;
     cout << "bestScore: " << bestFromEachGeneration[allTimeBestIndex].score << endl;
+
     loadBrainFromDNA(&brains[0], bestFromEachGeneration[allTimeBestIndex].dna);
 
     cout << "weight: " << brains[0].weights[0] << endl;
-    cout << "bias: " << brains[0].bias[0] << endl;
+    cout << "bias: " << brains[0].bias[0] << endl << endl;
 
     // save for graph visualization
 
@@ -119,13 +138,13 @@ int main() {
 
     // deallocate
     delete [] curGeneration;
+    delete exampleBrain;
     delete [] brains;
     delete [] lastGenerationBuffer;
     delete [] trainingBatch;
-    */
+    delete [] bestFromEachGeneration;
 
-    runVisualizer();
+    system("bash runVisualizer.sh");
 
     return 0;
 }
-

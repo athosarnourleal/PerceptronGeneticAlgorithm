@@ -2,3 +2,4 @@
 cd graphVisualizer
 javac Visualizer.java
 java Visualizer
+clear

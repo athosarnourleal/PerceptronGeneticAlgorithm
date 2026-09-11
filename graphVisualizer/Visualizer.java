@@ -15,60 +15,51 @@ import java.util.ArrayList;
 import javax.swing.JFrame;
 
 public class Visualizer extends Canvas implements Runnable, KeyListener {
-	
+
 	private static final long serialVersionUID = 1L;
 	public String title = "score improvement viewer";
 	public static int T = 16, W = 100*T,H = 60*T;
-	
+
 	public static int totalW;
 
 	public boolean isRunning = false;
-	
+
 	public BufferedImage screen = new BufferedImage(W,H,BufferedImage.TYPE_4BYTE_ABGR_PRE);
 	public JFrame frame;
 	public Thread thread = new Thread(this);
 	public int frameRate = 0;
-	
-	public ArrayList<Double> dataSet;
 
-	BufferedReader fileStream;
+	public ArrayList<Double> dataSetScore = new ArrayList<>();
+
+	BufferedReader fileReader;
 	public int collumnW = 10;
-	
+
 	public int cameraX = 0;
-	public int maxVx = 50, vx = 0;
-	
+	public int maxVx = 25, vx = 0;
+
 	public Visualizer() {
 		this.setPreferredSize(new Dimension(W,H));
 		this.addKeyListener(this);
-		
+
 		try {
-			fileStream = new BufferedReader(new FileReader("scores.txt"));
-			dataSet = extractData();
+			fileReader = new BufferedReader(new FileReader("scores.txt"));
+			extractDataScore();
 		} catch(IOException e) {
 		  e.printStackTrace();
 		}
-		
-		totalW = dataSet.size()*collumnW;
-		
-		
-//		dataSet = new ArrayList<>();
-//
-//		dataSet.add(1.0);
-//		dataSet.add(2.0);
-//		dataSet.add(3.0);
-//		dataSet.add(5.0);
-//		dataSet.add(4.0);
-		
+
+		totalW = dataSetScore.size()*collumnW;
+
 		System.out.println("data extracted.");
-		System.out.println("loaded: "+dataSet.size());
-		
+		System.out.println("loaded: "+dataSetScore.size());
+
 		initFrame();
 		thread.start();
 	}
-	
+
 	public void initFrame() {
 		frame = new JFrame(title);
-		
+
 		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 		frame.add(this);
 		frame.pack();
@@ -77,67 +68,58 @@ public class Visualizer extends Canvas implements Runnable, KeyListener {
 		frame.setLocationRelativeTo(null);
 		requestFocus();
 	}
-	
-	
 
-	public ArrayList<Double> extractData() throws IOException {
-		ArrayList<Double> data = new ArrayList<Double>();
-		
+
+
+	public void extractDataScore() throws IOException {
+		dataSetScore = new ArrayList<Double>();
+
 		String line;
-		while ((line = fileStream.readLine()) != null) {
-			data.add(Double.parseDouble(line));
+		while ((line = fileReader.readLine()) != null) {
+			dataSetScore.add(Double.parseDouble(line));
 		}
-		
-		return data;
 	}
-	
-	
-//	public double map(double val, double min1, double max1, double min2, double max2) {
-//		return min2 + val * (max2 - min2) / (max1 - min1);
-//	}
 
+    // copied from Arduino
 	public double map(double x, double in_min, double in_max, double out_min, double out_max) {
 		return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 	}
-	
-	public void drawLines(Graphics g) {
-		
-		// finding max value
-		double maxVal = dataSet.get(0);
-		double minVal = dataSet.get(0);
-		
-		for (int i = 1; i < dataSet.size(); i++) {
-			if (dataSet.get(i) > maxVal)  maxVal = dataSet.get(i);
-			if (dataSet.get(i) < minVal)  minVal = dataSet.get(i);
-		}
-		
-		
-		for (int i = 0; i < dataSet.size()-1; i++) {
 
-			int curHeight = (int)map(dataSet.get(i), minVal, maxVal, 0, H);
-			int nextHeight = (int)map(dataSet.get(i+1), minVal, maxVal, 0, H);
-			
-			
-			if (dataSet.get(i+1) >= dataSet.get(i)) {
+	public void drawLines(ArrayList<Double> dataset,  Graphics g) {
+
+		// finding max value
+		double maxVal = dataset.get(0);
+		double minVal = dataset.get(0);
+
+		for (int i = 1; i < dataset.size(); i++) {
+			if (dataset.get(i) > maxVal)  maxVal = dataset.get(i);
+			if (dataset.get(i) < minVal)  minVal = dataset.get(i);
+		}
+
+
+		for (int i = 0; i < dataset.size()-1; i++) {
+
+			int curHeight = (int)map(dataset.get(i), minVal, maxVal, 0, H);
+			int nextHeight = (int)map(dataset.get(i+1), minVal, maxVal, 0, H);
+
+
+			if (dataset.get(i+1) >= dataset.get(i)) {
 				g.setColor(Color.blue);
 			} else {
 				g.setColor(Color.red);
 			}
-			
-//			System.out.println("(" + (int)(i*collumnW) + ", "+ (int)(H-curHeight) + ", " + (int)((i+1)*collumnW) + ", " + (int)(H-nextHeight) + ")");
 
 			g.drawLine((int)(i*collumnW)-cameraX,(int)(H-curHeight),(int)((i+1)*collumnW)-cameraX,(int)(H-nextHeight));
-			
-//			g.fillRect((int)(i*collumnW),(int)(H-curHeight), 9, 9);
+
 		}
-		
+
 	}
-	
+
 	public void tick() {
 		if (totalW > W) {
-			
+
 			cameraX += vx;
-			
+
 			if (cameraX+vx < 0) {
 				cameraX = 0;
 				vx = 0;
@@ -148,32 +130,32 @@ public class Visualizer extends Canvas implements Runnable, KeyListener {
 			}
 		}
 	}
-	
+
 	public void render() {
 		BufferStrategy bs = this.getBufferStrategy();
 		if (bs == null) {
 			this.createBufferStrategy(3);
 			return;
 		}
-		
+
 		Graphics g = screen.getGraphics();
-		
+
 		g.setColor(Color.black);
 		g.fillRect(0,0,W,H);
 		// render //
 
-		drawLines(g);
-		
+		drawLines(dataSetScore, g);
+
 		// render //
 		g = bs.getDrawGraphics();
 		Rectangle scr = getBounds();
 		g.setColor(Color.black);
 		g.fillRect(scr.x,scr.y,scr.width,scr.height);
 		g.drawImage(screen,scr.width/2-W/2,scr.height/2-H/2,W,H,null);
-		
+
 		bs.show();
 	}
-	
+
 	public static void main(String[] args) {
 		new Visualizer();
 	}
@@ -186,7 +168,7 @@ public class Visualizer extends Canvas implements Runnable, KeyListener {
 		int frames = 0;
 		double timer = System.currentTimeMillis();
 		isRunning = true;
-		
+
 		while (isRunning) {
 			long now = System.nanoTime();
 			delta += (now-lastTime) / ns;
@@ -197,7 +179,7 @@ public class Visualizer extends Canvas implements Runnable, KeyListener {
 				frames++;
 				delta--;
 			}
-			
+
 			if (System.currentTimeMillis() - timer >= 1000) {
 				frameRate = frames;
 				frames = 0;
@@ -211,7 +193,7 @@ public class Visualizer extends Canvas implements Runnable, KeyListener {
 
 	@Override
 	public void keyReleased(KeyEvent e) {
-		
+
 		if (e.getKeyCode() == KeyEvent.VK_LEFT) {
 			vx -= maxVx;
 		}
@@ -225,7 +207,7 @@ public class Visualizer extends Canvas implements Runnable, KeyListener {
 
 	@Override
 	public void keyTyped(KeyEvent e) {     }
-	
+
 }
 
 

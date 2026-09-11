@@ -2,9 +2,9 @@
 #define GENALGNEURALNETWORK_H
 
 #include <cassert>
-#include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <iostream>
 
 // --------------------------------------------------------------------------------------------------------------------- UTIL
 
@@ -140,13 +140,12 @@ constexpr int GENE_NUMBER = WEIGHT_NUMBER + BIAS_NUMBER; // number of genes
 
 constexpr int GENE_DATA_BITS = 8;
 
-constexpr float MIN_WEIGHT_VAL = -4, MAX_WEIGHT_VAL = 4; // values for translation
-constexpr float MIN_BIAS_VAL = -6, MAX_BIAS_VAL = 6; // values for translation
+constexpr float MIN_WEIGHT_VAL = -10, MAX_WEIGHT_VAL = 10; // values for translation
+constexpr float MIN_BIAS_VAL = -10, MAX_BIAS_VAL = 10; // values for translation
 
-constexpr int SIZEOF_GENE_STRUCT = 1; // 1 byte
-struct gene { // 1 byte
-    unsigned int data : GENE_DATA_BITS;
-    int : 8 - GENE_DATA_BITS; // padding
+struct gene {
+    unsigned char data : GENE_DATA_BITS;
+    unsigned char : 8 - GENE_DATA_BITS;
 };
 
 constexpr int GENE_CAPACITY = powCompileTime(2, GENE_DATA_BITS);
@@ -158,23 +157,20 @@ inline float decodeGeneValue(const gene gene, const float min, const float max) 
 
 inline void loadBrainFromDNA(NeuralNetwork *brain, const gene* dna) {
 
-    // std::cout << std::endl << "loading...: " << std::endl;
-    int i;
-    for (i = 0; i < WEIGHT_NUMBER; i++) { // load into weights
-        brain->weights[i] = decodeGeneValue(*dna, MIN_WEIGHT_VAL, MAX_WEIGHT_VAL);
-        dna++;
-        // std::cout << "weights: " << brain->weights[i] << std::endl;
+    int dnaCounter = 0;
+    for (int i = 0; i < WEIGHT_NUMBER; i++) { // load into weights
+        brain->weights[i] = decodeGeneValue(dna[dnaCounter++], MIN_WEIGHT_VAL, MAX_WEIGHT_VAL);
     }
-    for (i = 0; i < BIAS_NUMBER; i++) { // load into weights
-        brain->bias[i] = decodeGeneValue(*dna, MIN_BIAS_VAL, MAX_BIAS_VAL);
-        dna++;
-        // std::cout << "bias: " << brain->bias[i] << std::endl;
+    for (int i = 0; i < BIAS_NUMBER; i++) { // load into weights
+        brain->bias[i] = decodeGeneValue(dna[dnaCounter++], MIN_BIAS_VAL, MAX_BIAS_VAL);
     }
+
+    assert(dnaCounter == GENE_NUMBER);
 }
 
 // POPULATION MANIPULATING //
 
-constexpr int POPULATION_SIZE = 2000;
+constexpr int POPULATION_SIZE = 1000;
 
 struct element {
     gene dna[GENE_NUMBER];
@@ -189,64 +185,136 @@ inline void createIndividual(element* individual) {
 }
 
 inline void createPopulation(element* population) {
-
     for (int i = 0; i < POPULATION_SIZE; i++) {
         createIndividual(&population[i]);
     }
 }
 
+inline void transferDNA(gene* recipient, const gene* donor) {
+    for (int i = 0; i < GENE_NUMBER; i++) {
+        recipient[i] = donor[i];
+    }
+}
+
 // EVOLUTION //
 
-inline int roulette(const element* population, const float scoreSum) {
+inline int roulette(const element *population, const float scoreSum) {
     const float threshold = randomDouble() * scoreSum;
 
     float aux = population[0].score;
+
     int index = 0;
-    while (aux < threshold) {
-        aux += population[index++].score;
+    while (aux <= threshold) {
+        if (index >= POPULATION_SIZE) {
+            std::cout << "deu erro!" << std::endl;
+            throw std::runtime_error("deu erro!");
+            break;
+        }
+        assert(population[index].score >= 0); // DEBUG
+        aux += population[index].score;
+        index++;
     }
 
     return index;
 }
 
+constexpr int tournamentSize = POPULATION_SIZE * 0.1;
+inline int tournament(const element* population) {
+    int tournament[tournamentSize];
+
+    // create random roster
+    for (int i = 0; i < tournamentSize; i++) {
+        tournament[i] = randomInt(POPULATION_SIZE);
+    }
+
+    // get best from roster
+    int bestIndex = tournament[0];
+    float bestScore = population[bestIndex].score;
+    for (int i = 1; i < tournamentSize; i++) {
+        if (bestScore > population[tournament[i]].score) {
+            bestIndex = tournament[i];
+            bestScore = population[tournament[i]].score;
+        }
+    }
+
+    return bestIndex;
+}
 
 // create buffer in cache memory --- TODO: check if it isn't too big for cache when applying Neural Networks to .minst
 static element childDnaBuffer;
 
-inline void crossover(const gene* parent1, const gene* parent2) {
-    const int cut = randomInt(GENE_NUMBER);
+inline void crossoverBytesOnly(const gene* parent1, const gene* parent2) {
+    const int cut = randomInt(GENE_NUMBER+1);
 
     for (int i = 0; i < GENE_NUMBER; i++) {
-        childDnaBuffer.dna[i].data = (i < cut) ? parent1[i].data : parent2[i].data;
+        if (i <= cut) {
+            childDnaBuffer.dna[i] = parent1[i];
+        } else {
+            childDnaBuffer.dna[i] = parent2[i];
+        }
     }
 }
 
-constexpr float mutationChance = 0.1; // 0% - 100%
+constexpr gene filledGene = {.data = GENE_CAPACITY-1};
+
+inline void crossover(const gene* parent1, const gene* parent2) {
+
+    const int cut = randomInt(GENE_NUMBER*GENE_DATA_BITS + 1);
+    const int cutGene = cut / GENE_DATA_BITS;
+    const int cutBit = cut % GENE_DATA_BITS;
+
+    for (int i = 0; i < GENE_NUMBER; i++) {
+        if (i < cutGene) {
+            childDnaBuffer.dna[i] = parent1[i];
+        } else if (i > cutGene) {
+            childDnaBuffer.dna[i] = parent2[i];
+        } else {
+            // merge both genes
+
+            const int cutBitFromRight = GENE_DATA_BITS - cutBit;
+
+            // DEBUG //
+            unsigned char mergedGeneData = GENE_CAPACITY-1; // fill genes with "1"
+            mergedGeneData = parent2[i].data & ~(static_cast<unsigned char>(GENE_CAPACITY-1) << cutBitFromRight);
+            mergedGeneData = mergedGeneData | ((parent1[i].data >> cutBitFromRight) << cutBitFromRight);
+            childDnaBuffer.dna[i].data = mergedGeneData;
+
+
+            // childDnaBuffer.dna[i].data = (parent2[i].data & ~(static_cast<unsigned char>(GENE_CAPACITY-1) << cutBitFromRight))
+            //                         | ((parent1[i].data >> cutBitFromRight) << cutBitFromRight);
+
+        }
+    }
+}
+
+constexpr float MUTATION_CHANCE = 0.3; // 0% - 100%
 inline void mutate() {
     for (int i = 0; i < GENE_NUMBER; i++) {
-
         for (int j = 0; j < GENE_DATA_BITS; j++) {
-            if (randomDouble() < mutationChance) {
-                childDnaBuffer.dna[i].data ^= 0x01 << j; // flip bit
+            if (randomDouble() < MUTATION_CHANCE) {
+                childDnaBuffer.dna[i].data ^= 0b1 << j; // flip bit
             }
         }
     }
 }
 
+struct dna {
+    gene genes[GENE_NUMBER];
+};
 
-inline void generation(element* curGeneration, gene* lastGenerationBuffer) {
+inline void generation(element* curGeneration, dna* lastGenerationBuffer) {
 
     float scoreSum = 0;
     for (int i = 0; i < POPULATION_SIZE; i++) {
-        memcpy(&lastGenerationBuffer[i * GENE_NUMBER], curGeneration[i].dna, GENE_NUMBER * sizeof(gene));
+        memcpy(&lastGenerationBuffer[i], curGeneration[i].dna, GENE_NUMBER * sizeof(gene));
 
         scoreSum += curGeneration[i].score;
     }
 
     for (int i = 0; i < POPULATION_SIZE; i++) {
         crossover(
-            &lastGenerationBuffer[roulette(curGeneration, scoreSum) * GENE_NUMBER], // select parent1
-            &lastGenerationBuffer[roulette(curGeneration, scoreSum) * GENE_NUMBER]  // select parent2
+            lastGenerationBuffer[roulette(curGeneration, scoreSum)].genes, // select parent1
+            lastGenerationBuffer[roulette(curGeneration, scoreSum)].genes  // select parent2
         );
 
         mutate();
@@ -257,55 +325,25 @@ inline void generation(element* curGeneration, gene* lastGenerationBuffer) {
     // OBS: the scores are NOT meant to be reset in generation(), since they will be overriden when running the neural network again
 }
 
-constexpr int ELITE_SIZE = POPULATION_SIZE*0.1;
-static int elite[ELITE_SIZE];
+// /* TODO: MAYBE LATER
+inline void generationTournament(element* curGeneration, dna* lastGenerationBuffer) {
 
-inline void generationElitism(element* curGeneration, gene* lastGenerationBuffer) {
-
-    for (int i = 0; i < ELITE_SIZE; i++) {
-        elite[i] = i;
+    for (int i = 0; i < POPULATION_SIZE; i++) {
+        memcpy(&lastGenerationBuffer[i].genes, curGeneration[i].dna, GENE_NUMBER * sizeof(gene));
     }
 
-    static float scoreSum = 0;
     for (int i = 0; i < POPULATION_SIZE; i++) {
-        memcpy(&lastGenerationBuffer[i * GENE_NUMBER], curGeneration[i].dna, GENE_NUMBER * sizeof(gene));
-
-        scoreSum += curGeneration[i].score;
-
-        int j;
-        for (j = ELITE_SIZE-1; j >= 0; j--) {
-            if (curGeneration[i].score < curGeneration[elite[j]].score) {
-                j++;
-                break;
-            }
-        }
-        if (j < ELITE_SIZE) {
-            elite[j] = i;
-        }
-    }
-
-    static bool inElite = false;
-    for (int i = 0; i < POPULATION_SIZE; i++) {
-        inElite = false;
-        for (int j = 0; j < ELITE_SIZE; j++) {
-            if (i == elite[j]) inElite = true;
-        }
-        if (inElite) continue;
-
-
         crossover(
-            &lastGenerationBuffer[roulette(curGeneration, scoreSum) * GENE_NUMBER], // select parent1
-            &lastGenerationBuffer[roulette(curGeneration, scoreSum) * GENE_NUMBER]  // select parent2
+            lastGenerationBuffer[tournament(curGeneration) * GENE_NUMBER].genes, // select parent1
+            lastGenerationBuffer[tournament(curGeneration) * GENE_NUMBER].genes  // select parent2
         );
 
         mutate();
 
         memcpy(curGeneration[i].dna, childDnaBuffer.dna, GENE_NUMBER * sizeof(gene)); // save result from buffer to the next generation
     }
-
-    // OBS: the scores are NOT meant to be reset in generation(), since they will be overriden when running the neural network again
 }
-
+// */
 
 // EVALUATION //
 
