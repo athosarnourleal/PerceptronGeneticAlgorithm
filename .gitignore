@@ -2,4 +2,4 @@
 main
 graphVisualizer/Visualizer.class
 graphVisualizer/scores.txt
-graphVisualizer/brain.txt
+graphVisualizer/best.csv
