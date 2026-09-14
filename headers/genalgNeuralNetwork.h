@@ -210,10 +210,9 @@ inline int roulette(const element *population, const float scoreSum) {
 // create buffer in cache memory --- TODO: check if it isn't too big for cache when applying this code to the .minst
 static element childDnaBuffer;
 
-constexpr unsigned char filledGeneData = GENE_CAPACITY-1;
 inline void crossover(const gene* parent1, const gene* parent2) {
-
     const int cut = randomInt(GENE_NUMBER*GENE_DATA_BITS + 1);
+
     const int cutGene = cut / GENE_DATA_BITS;
     const int cutBit = cut % GENE_DATA_BITS;
     const int cutBitFromRight = GENE_DATA_BITS - cutBit;
@@ -225,14 +224,13 @@ inline void crossover(const gene* parent1, const gene* parent2) {
             childDnaBuffer.dna[i] = parent2[i];
         } else {
             // merge both genes
-
             childDnaBuffer.dna[i].data =
-                    (parent2[i].data & ~(filledGeneData << cutBitFromRight)) | ((parent1[i].data >> cutBitFromRight) << cutBitFromRight);
+                ((parent2[i].data >> cutBitFromRight) << cutBitFromRight) | (parent2[i].data >> cutBit);
         }
     }
 }
 
-constexpr float MUTATION_CHANCE = 0.05; // 0% - 100%
+constexpr float MUTATION_CHANCE = 0.3; // 0% - 100%
 inline void mutation() {
     for (int i = 0; i < GENE_NUMBER; i++) {
         for (int j = 0; j < GENE_DATA_BITS; j++) {
