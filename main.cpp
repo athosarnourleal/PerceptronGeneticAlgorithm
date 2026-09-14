@@ -47,11 +47,8 @@ static void evaluate(NeuralNetwork *brain, element *individual) {
 
 constexpr int EPOCHS = 1000;
 
-static element generationBackup[POPULATION_SIZE];
-
-
 int main() {
-    srand(32413422);
+    srand(42);
 
     element* bestFromEachGeneration = new element[EPOCHS * GENE_NUMBER];
 
@@ -60,11 +57,6 @@ int main() {
     createPopulation(curGeneration);
 
     NeuralNetwork* brains = new NeuralNetwork[POPULATION_SIZE];
-    NeuralNetwork* exampleBrain = new NeuralNetwork;
-
-    for (int i = 0 ; i < POPULATION_SIZE ; i++) {
-        generationBackup[i] = curGeneration[i];
-    }
 
     for (int epoch = 0; epoch < EPOCHS; epoch++) {
 
@@ -89,13 +81,12 @@ int main() {
         memcpy(&bestFromEachGeneration[epoch].dna, &lastGenerationBuffer[bestElementIndex],GENE_NUMBER); // save best DNA
         bestFromEachGeneration[epoch].score = curGeneration[bestElementIndex].score; // save best score
 
-        std::cout << endl << "generation " << epoch << ": " << bestFromEachGeneration[epoch].score  << endl;
-        if (epoch >= 1) {
-            std::cout << "difference: " << (bestFromEachGeneration[epoch].score - bestFromEachGeneration[epoch-1].score) << endl;
+        if (epoch % 10 == 0) {
+            std::cout << endl << "generation " << epoch << ": " << bestFromEachGeneration[epoch].score  << endl;
+            if (epoch > 0) {
+                std::cout << "difference: " << (bestFromEachGeneration[epoch].score - bestFromEachGeneration[epoch-1].score) << endl;
+            }
         }
-        loadBrainFromDNA(exampleBrain, bestFromEachGeneration[epoch].dna);
-        cout << "weight: " << exampleBrain->weights[0] << endl;
-        cout << "bias: " << exampleBrain->bias[0] << endl << endl;
     }
 
     // get all time best
@@ -107,7 +98,7 @@ int main() {
         }
     }
 
-    // DEBUG
+    // RESULTS
 
     cout << endl << "first score: " << bestFromEachGeneration[0].score << endl;
     cout << "bestScore: " << bestFromEachGeneration[allTimeBestIndex].score << endl;
@@ -123,16 +114,16 @@ int main() {
 
     // save all time best in file
 
+    saveBestIndividual(bestFromEachGeneration[allTimeBestIndex].dna, GENE_NUMBER);
 
-    // deallocate
+    // deallocate all used heap memory
     delete [] curGeneration;
-    delete exampleBrain;
     delete [] brains;
     delete [] lastGenerationBuffer;
     delete [] trainingBatch;
     delete [] bestFromEachGeneration;
 
-    system("bash runVisualizer.sh");
+    // system("bash runVisualizer.sh");
 
     return 0;
 }

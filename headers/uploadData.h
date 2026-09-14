@@ -7,27 +7,23 @@
 #include "genalgNeuralNetwork.h"
 
 inline void uploadGenerationScores(const element* bestFromEachGeneration, const int epochNum) {
-    std::ofstream fileSopre("graphVisualizer/scores.txt", std::ios::trunc);
+    std::ofstream fileWriter("graphVisualizer/scores.txt", std::ios::trunc);
 
     for (int i = 0; i < epochNum; i++) {
-        fileSopre << bestFromEachGeneration[i].score << '\n';
+        fileWriter << bestFromEachGeneration[i].score << '\n';
     }
 
-    fileSopre.close();
+    fileWriter.close();
+}
 
-    std::ofstream fileBrain("graphVisualizer/brain.txt", std::ios::trunc);
+inline void saveBestIndividual(const gene* bestIndividualDNA, const int geneNumber) {
+    std::ofstream fileWriter("graphVisualizer/best.csv", std::ios::trunc);
 
-    NeuralNetwork *brain = new NeuralNetwork();
-
-    for (int i = 0; i < epochNum; i++) {
-        loadBrainFromDNA(brain, bestFromEachGeneration[i].dna);
-        fileBrain << brain->weights[0] << '\n';
-        fileBrain << brain->bias[0] << '\n';
+    for (int i = 0; i < geneNumber; i++) {
+        fileWriter << static_cast<unsigned int>(bestIndividualDNA[i].data) << ',';
     }
 
-    fileBrain.close();
-
-    delete brain;
+    fileWriter.close();
 }
 
 

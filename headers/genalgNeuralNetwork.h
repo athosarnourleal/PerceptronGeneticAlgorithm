@@ -32,7 +32,7 @@ inline void swap(int &x, int &y) noexcept {
     x = y ^ x;
 }
 
-// random number generating // TODO: update random engine
+// random number generating // TODO: update random engine later
 inline int randomInt() {
     return rand();
 }
@@ -84,7 +84,7 @@ struct NeuralNetwork {
 };
 
 inline float dotProductUnroll2(const float* vector1, const  float* vector2, const int size) {
-    float sum1 = 0.0;// uses two cores automatically(in theory)
+    float sum1 = 0.0;// uses two cores automatically(in theory...)
     float sum2 = 0.0;
 
     for (int i = 0; i < size; i+=2) {
@@ -98,7 +98,7 @@ inline float dotProductUnroll2(const float* vector1, const  float* vector2, cons
 inline float quickDotProduct(const float* vector1, const  float* vector2, const int size) {
     if (size % 2 == 0) return dotProductUnroll2(vector1, vector2, size);
 
-    return dotProductUnroll2(vector1, vector2, size-1) + (vector1[size-1]*vector2[size-1]);
+    return dotProductUnroll2(vector1, vector2, size-1) + vector1[size-1]*vector2[size-1];
 }
 
 inline float ReLU(const float u) {
@@ -134,21 +134,20 @@ inline void runNeuralNetwork(const float *inputs, NeuralNetwork *brain) {
 // --------------------------------------------------------------------------------------------------------------------- GENALG
 
 
-// DNA MANIPULATION //
+// GENETIC MANIPULATION //
 
 constexpr int GENE_NUMBER = WEIGHT_NUMBER + BIAS_NUMBER; // number of genes
 
-constexpr int GENE_DATA_BITS = 8;
+constexpr int GENE_DATA_BITS = 8; // {   0 < GENE_DATA_BITS < 9   }
+constexpr int GENE_CAPACITY = powCompileTime(2, GENE_DATA_BITS);
 
 constexpr float MIN_WEIGHT_VAL = -10, MAX_WEIGHT_VAL = 10; // values for translation
 constexpr float MIN_BIAS_VAL = -10, MAX_BIAS_VAL = 10; // values for translation
 
 struct gene {
     unsigned char data : GENE_DATA_BITS;
-    unsigned char : 8 - GENE_DATA_BITS;
+    unsigned char : 8 - GENE_DATA_BITS; // padding
 };
-
-constexpr int GENE_CAPACITY = powCompileTime(2, GENE_DATA_BITS);
 
 constexpr float CONVERSION_DENOMINATOR = 1.0f / (GENE_CAPACITY - 1.0f);
 inline float decodeGeneValue(const gene gene, const float min, const float max) {
@@ -156,7 +155,6 @@ inline float decodeGeneValue(const gene gene, const float min, const float max) 
 }
 
 inline void loadBrainFromDNA(NeuralNetwork *brain, const gene* dna) {
-
     int dnaCounter = 0;
     for (int i = 0; i < WEIGHT_NUMBER; i++) { // load into weights
         brain->weights[i] = decodeGeneValue(dna[dnaCounter++], MIN_WEIGHT_VAL, MAX_WEIGHT_VAL);
@@ -164,8 +162,6 @@ inline void loadBrainFromDNA(NeuralNetwork *brain, const gene* dna) {
     for (int i = 0; i < BIAS_NUMBER; i++) { // load into weights
         brain->bias[i] = decodeGeneValue(dna[dnaCounter++], MIN_BIAS_VAL, MAX_BIAS_VAL);
     }
-
-    assert(dnaCounter == GENE_NUMBER);
 }
 
 // POPULATION MANIPULATING //
@@ -181,7 +177,7 @@ inline void createIndividual(element* individual) {
     for (int i = 0; i < GENE_NUMBER; i++) {
         individual->dna[i].data = randomInt(GENE_CAPACITY);
     }
-    individual->score = static_cast<float>(RAND_MAX);
+    individual->score = 0;
 }
 
 inline void createPopulation(element* population) {
@@ -204,7 +200,6 @@ inline int roulette(const element *population, const float scoreSum) {
             throw std::runtime_error("deu erro!");
             break;
         }
-        assert(population[index].score >= 0); // DEBUG
         aux += population[index].score;
         index++;
     }
@@ -212,16 +207,16 @@ inline int roulette(const element *population, const float scoreSum) {
     return index;
 }
 
-// create buffer in cache memory --- TODO: check if it isn't too big for cache when applying Neural Networks to .minst
+// create buffer in cache memory --- TODO: check if it isn't too big for cache when applying this code to the .minst
 static element childDnaBuffer;
 
-constexpr gene filledGene = {.data = GENE_CAPACITY-1};
-
+constexpr unsigned char filledGeneData = GENE_CAPACITY-1;
 inline void crossover(const gene* parent1, const gene* parent2) {
 
     const int cut = randomInt(GENE_NUMBER*GENE_DATA_BITS + 1);
     const int cutGene = cut / GENE_DATA_BITS;
     const int cutBit = cut % GENE_DATA_BITS;
+    const int cutBitFromRight = GENE_DATA_BITS - cutBit;
 
     for (int i = 0; i < GENE_NUMBER; i++) {
         if (i < cutGene) {
@@ -231,24 +226,14 @@ inline void crossover(const gene* parent1, const gene* parent2) {
         } else {
             // merge both genes
 
-            const int cutBitFromRight = GENE_DATA_BITS - cutBit;
-
-            // DEBUG //
-            unsigned char mergedGeneData = GENE_CAPACITY-1; // fill genes with "1"
-            mergedGeneData = parent2[i].data & ~(static_cast<unsigned char>(GENE_CAPACITY-1) << cutBitFromRight);
-            mergedGeneData = mergedGeneData | ((parent1[i].data >> cutBitFromRight) << cutBitFromRight);
-            childDnaBuffer.dna[i].data = mergedGeneData;
-
-
-            // childDnaBuffer.dna[i].data = (parent2[i].data & ~(static_cast<unsigned char>(GENE_CAPACITY-1) << cutBitFromRight))
-            //                         | ((parent1[i].data >> cutBitFromRight) << cutBitFromRight);
-
+            childDnaBuffer.dna[i].data =
+                    (parent2[i].data & ~(filledGeneData << cutBitFromRight)) | ((parent1[i].data >> cutBitFromRight) << cutBitFromRight);
         }
     }
 }
 
-constexpr float MUTATION_CHANCE = 0.3; // 0% - 100%
-inline void mutate() {
+constexpr float MUTATION_CHANCE = 0.05; // 0% - 100%
+inline void mutation() {
     for (int i = 0; i < GENE_NUMBER; i++) {
         for (int j = 0; j < GENE_DATA_BITS; j++) {
             if (randomDouble() < MUTATION_CHANCE) {
@@ -277,7 +262,7 @@ inline void generation(element* curGeneration, dna* lastGenerationBuffer) {
             lastGenerationBuffer[roulette(curGeneration, scoreSum)].genes  // select parent2
         );
 
-        mutate();
+        mutation();
 
         memcpy(curGeneration[i].dna, childDnaBuffer.dna, GENE_NUMBER * sizeof(gene)); // save result from buffer to the next generation
     }
