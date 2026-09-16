@@ -3,3 +3,5 @@ main
 graphVisualizer/Visualizer.class
 graphVisualizer/scores.txt
 graphVisualizer/best.csv
+# do not commit the .csv database to avoid size restrictions
+mnist_train.csv

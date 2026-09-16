@@ -118,6 +118,7 @@ inline void runNeuralNetwork(const float *inputs, NeuralNetwork *brain) {
                = brain->bias[biasPointer] + quickDotProduct(&runBuffer[lastBufferStart], &brain->weights[weightPointer], LAYER_SIZES[layer-1]);
 
             if (layer < LAYER_NUMBER-1) {
+                // apply ReLU in the hidden layers only
                 runBuffer[curBufferStart + neuron] = ReLU(runBuffer[curBufferStart + neuron]);
             }
 

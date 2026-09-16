@@ -1,5 +1,6 @@
 #include <iostream>
 #include "headers/genalgNeuralNetwork.h"
+#include "headers/mnistLoading.h"
 #include "headers/uploadData.h"
 
 using namespace std;
@@ -30,6 +31,8 @@ static float* createTrainingBatch(float *batch) {
 
     return batch;
 }
+
+static DataSet trainingData;
 
 constexpr float INV_BATCH_SIZE = 1.0f / static_cast<float>(BATCH_SIZE);
 static void evaluate(NeuralNetwork *brain, element *individual) {
@@ -66,7 +69,7 @@ int main() {
         }
 
         // get batch
-        createTrainingBatch(trainingBatch);
+        createTrainingBatch(trainingBatch);K
 
         // execute population
         for (int j = 0; j < POPULATION_SIZE; j++) {
@@ -117,13 +120,16 @@ int main() {
     saveBestIndividual(bestFromEachGeneration[allTimeBestIndex].dna, GENE_NUMBER);
 
     // deallocate all used heap memory
+
     delete [] curGeneration;
     delete [] brains;
     delete [] lastGenerationBuffer;
     delete [] trainingBatch;
     delete [] bestFromEachGeneration;
 
-    // system("bash runVisualizer.sh");
+    // run visualization
+
+    system("bash runVisualizer.sh");
 
     return 0;
 }
