@@ -3,59 +3,47 @@
 #include "headers/mnistLoading.h"
 #include "headers/uploadData.h"
 
-using namespace std;
-
-// BASIC TESTING EXAMPLE
-constexpr float T_W = 2, T_B = 4;
-
-static float getSolution(const int x) {
-    return T_W * static_cast<float>(x) + T_B;
-}
-
-
-// TODO: create library for Dataset Management
-constexpr int BATCH_SIZE = 2000;
-
-static float* trainingBatch = new float[BATCH_SIZE*2];
-constexpr int training_range = 3000;
-
-static float* createTrainingBatch(float *batch) {
-    for (int i = 0; i < BATCH_SIZE; i++) {
-        batch[i*2] = randomDouble()*training_range*2 - training_range;
-        if (randomDouble() >= 0.5) {
-            batch[i*2] *= -1;
-        }
-
-        batch[i*2+1] = getSolution(batch[i*2]);
-    }
-
-    return batch;
-}
-
 static DataSet trainingData;
 
-constexpr float INV_BATCH_SIZE = 1.0f / static_cast<float>(BATCH_SIZE);
-static void evaluate(NeuralNetwork *brain, element *individual) {
-    float avgError = 0;
-    for (int i = 0; i < BATCH_SIZE; ++i) {
-        // run
-        runNeuralNetwork(&trainingBatch[i*2], brain);
+static double *inputs = new double {100.0};
 
-        avgError += abs(trainingBatch[i*2 + 1] - brain->output[0]);
+static void evaluate(NeuralNetwork *brain, element *individual) {
+    runNeuralNetwork(inputs, brain);
+
+    // TODO: optimize later
+
+    double totalScore = 0;
+    for (int i = 0; i < TRAINING_BATCH_SIZE; i++) {
+
+        double iterationAvgError = 0;
+        for (int neuron = 0; neuron < OUTPUT_SIZE; neuron++) {
+            double curError = 0;
+            if (neuron == trainingData.trainingBatchLabels[i]) {
+                // right answer --> expects: 1
+                curError = brain->output[neuron] - 1;
+            } else {
+                // wrong answer --> expects: 0
+                curError = brain->output[neuron] - 0;
+            }
+
+            iterationAvgError += curError*curError;
+        }
+        iterationAvgError /= OUTPUT_SIZE;
+
+        totalScore += 1 / (iterationAvgError + 1);
     }
 
-    avgError = avgError * INV_BATCH_SIZE;
-    individual->score = abs(1 / (avgError + 1));
+    individual->score = totalScore;
 }
 
-constexpr int EPOCHS = 1000;
+constexpr int EPOCHS = 200;
 
 int main() {
     srand(42);
 
-    element* bestFromEachGeneration = new element[EPOCHS * GENE_NUMBER];
-
+    element* bestFromEachGeneration = new element[EPOCHS];
     dna* lastGenerationBuffer = new dna[POPULATION_SIZE];
+
     element* curGeneration = new element[POPULATION_SIZE];
     createPopulation(curGeneration);
 
@@ -69,7 +57,7 @@ int main() {
         }
 
         // get batch
-        createTrainingBatch(trainingBatch);
+        trainingData.assembleTrainingBatch();
 
         // execute population
         for (int j = 0; j < POPULATION_SIZE; j++) {
@@ -85,9 +73,9 @@ int main() {
         bestFromEachGeneration[epoch].score = curGeneration[bestElementIndex].score; // save best score
 
         if (epoch % 10 == 0) {
-            std::cout << endl << "generation " << epoch << ": " << bestFromEachGeneration[epoch].score  << endl;
+                std::cout << std::endl << "generation " << epoch << ": " << bestFromEachGeneration[epoch].score  << '\n';
             if (epoch > 0) {
-                std::cout << "difference: " << (bestFromEachGeneration[epoch].score - bestFromEachGeneration[epoch-1].score) << endl;
+                std::cout << "difference: " << (bestFromEachGeneration[epoch].score - bestFromEachGeneration[epoch-1].score)  << '\n';
             }
         }
     }
@@ -103,13 +91,18 @@ int main() {
 
     // RESULTS
 
-    cout << endl << "first score: " << bestFromEachGeneration[0].score << endl;
-    cout << "bestScore: " << bestFromEachGeneration[allTimeBestIndex].score << endl;
+    std::cout << '\n' << "first score: " << bestFromEachGeneration[0].score << '\n';
+    std::cout << "bestScore: " << bestFromEachGeneration[allTimeBestIndex].score << '\n';
 
     loadBrainFromDNA(&brains[0], bestFromEachGeneration[allTimeBestIndex].dna);
 
-    cout << "weight: " << brains[0].weights[0] << endl;
-    cout << "bias: " << brains[0].bias[0] << endl << endl;
+    runNeuralNetwork(inputs, &brains[0]);
+
+    std::cout << "--- OUTPUTS: " << '\n';
+    for (int i = 0; i < OUTPUT_SIZE; i++) {
+        std::cout << i << ": " << brains[0].output[i] << '\n';
+    }
+    std::cout << "biggestOutput: " << getBiggestOutputIndex(&brains[0]) << '\n';
 
     // save for graph visualization
 
@@ -121,10 +114,11 @@ int main() {
 
     // deallocate all used heap memory
 
+    delete inputs; // TODO: REMOVE DEBUGGING
+
     delete [] curGeneration;
     delete [] brains;
     delete [] lastGenerationBuffer;
-    delete [] trainingBatch;
     delete [] bestFromEachGeneration;
 
     // run visualization

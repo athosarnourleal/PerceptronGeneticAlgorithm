@@ -11,28 +11,28 @@
 
 inline std::string trainingDataFileName = "mnist_train.csv";
 
-constexpr int TRAINING_BATCH_SIZE = 1000;
+constexpr int TRAINING_BATCH_SIZE = 100;
 
 class DataSet {
 public:
 
     int *trainingBatchLabels;
-    float **trainingBatchImages;
+    double **trainingBatchImages;
 
     explicit DataSet() {
-        std::cout << "loading training data..." << std::endl;
+        std::cout << "loading training data..." << '\n';
 
         getDataDimensions();
 
         dataSetLabels = new int[dataSetSize];
-        dataSetImages = new float[dataSetSize*imageSize];
+        dataSetImages = new double[dataSetSize*imageSize];
 
         trainingBatchLabels = new int[TRAINING_BATCH_SIZE];
-        trainingBatchImages = new float*[TRAINING_BATCH_SIZE];
+        trainingBatchImages = new double*[TRAINING_BATCH_SIZE];
 
         loadData();
 
-        std::cout << "data successfully loaded." << std::endl;
+        std::cout << "data successfully loaded." << '\n';
     }
 
     void assembleTrainingBatch() const {
@@ -54,7 +54,7 @@ public:
 
 private:
     int *dataSetLabels;
-    float *dataSetImages;
+    double *dataSetImages;
 
     std::size_t dataSetSize = 0;
     std::size_t imageSize = 0;
@@ -62,7 +62,7 @@ private:
     void loadData() const {
         std::ifstream file(trainingDataFileName);
         if (file.is_open() == false) {
-            std::cerr << "file não foi encontrada ou não pode ser aberta" << std::endl;
+            std::cerr << "file não foi encontrada ou não pode ser aberta" << '\n';
             exit(404);
         }
 
@@ -98,7 +98,7 @@ private:
     void getDataDimensions() {
         std::ifstream file(trainingDataFileName);
         if (file.is_open() == false) {
-            std::cerr << "Arquivo não foi encontrado ou não pode ser aberto" << std::endl;
+            std::cerr << "Arquivo não foi encontrado ou não pode ser aberto" << '\n';
             exit(404);
         }
         std::string line;
