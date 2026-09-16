@@ -69,7 +69,7 @@ int main() {
         }
 
         // get batch
-        createTrainingBatch(trainingBatch);K
+        createTrainingBatch(trainingBatch);
 
         // execute population
         for (int j = 0; j < POPULATION_SIZE; j++) {
