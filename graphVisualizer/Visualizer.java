@@ -32,6 +32,7 @@ public class Visualizer extends Canvas implements Runnable, KeyListener {
 	public ArrayList<Double> dataSetScore = new ArrayList<>();
 
 	BufferedReader fileReader;
+	public int offset = 10;
 	public int collumnW = 10;
 
 	public int cameraX = 0;
@@ -99,8 +100,8 @@ public class Visualizer extends Canvas implements Runnable, KeyListener {
 
 		for (int i = 0; i < dataset.size()-1; i++) {
 
-			int curHeight = (int)map(dataset.get(i), minVal, maxVal, 0, H-2);
-			int nextHeight = (int)map(dataset.get(i+1), minVal, maxVal, 0, H-2);
+			int curHeight = (int)map(dataset.get(i), minVal, maxVal, offset, H-offset);
+			int nextHeight = (int)map(dataset.get(i+1), minVal, maxVal, offset, H-offset);
 
 
 			if (dataset.get(i+1) >= dataset.get(i)) {

@@ -11,11 +11,10 @@
 
 inline std::string trainingDataFileName = "mnist_train.csv";
 
-constexpr int TRAINING_BATCH_SIZE = 100;
+constexpr int TRAINING_BATCH_SIZE = 800;
 
 class DataSet {
 public:
-
     int *trainingBatchLabels;
     double **trainingBatchImages;
 
@@ -38,7 +37,6 @@ public:
     void assembleTrainingBatch() const {
         for (int i = 0; i < TRAINING_BATCH_SIZE; i++) {
             const int chosen = randomInt(TRAINING_BATCH_SIZE);
-
             trainingBatchLabels[i] = dataSetLabels[chosen]; // store label
             trainingBatchImages[i] = &dataSetImages[chosen*imageSize]; // store reference to image
         }
@@ -87,12 +85,8 @@ private:
                 }
             }
 
-            assert(imageVectorPosition == imageSize);
-
             curLine++;
         }
-
-        assert(curLine == dataSetSize);
     }
 
     void getDataDimensions() {
@@ -101,20 +95,17 @@ private:
             std::cerr << "Arquivo não foi encontrado ou não pode ser aberto" << '\n';
             exit(404);
         }
+
         std::string line;
 
         getline(file, line); // get header
 
         imageSize = std::count(line.begin(), line.end(), ',');
 
-        assert(imageSize == 28*28); // DEBUG
-
         dataSetSize = 0;
         while (getline(file, line)) {
             dataSetSize++;
         }
-
-        assert(dataSetSize == 60000); // DEBUG
     }
 };
 

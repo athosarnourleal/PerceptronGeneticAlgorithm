@@ -76,7 +76,7 @@ constexpr int BIGGEST_LAYER_SIZE = getBiggestLayerSize();
 
 constexpr int WEIGHT_NUMBER = calculateWeightNumber(), BIAS_NUMBER = LAYER_NUMBER-1;
 
-inline double runBuffer[BIGGEST_LAYER_SIZE * 2];
+static double runBuffer[BIGGEST_LAYER_SIZE * 2];
 
 struct NeuralNetwork {
     double weights[WEIGHT_NUMBER];
@@ -109,20 +109,24 @@ inline double ReLU(const double u) {
 inline void runNeuralNetwork(const double *inputs, NeuralNetwork *brain) {
     memcpy(runBuffer, inputs, LAYER_SIZES[0] * sizeof(double)); // load input into buffer
 
-    int weightPointer = 0, biasPointer = 0;
+    int weightPointer = 0;
     int curBufferStart = BIGGEST_LAYER_SIZE, lastBufferStart = 0; // selects which half of the buffer is used
 
     double outputMin = 0, outputMax = 0;
     // run
     for (int layer = 1; layer < LAYER_NUMBER; layer++) {
         for (int neuron = 0; neuron < LAYER_SIZES[layer]; neuron++) {
-            runBuffer[curBufferStart + neuron]
-               = brain->bias[biasPointer] + quickDotProduct(&runBuffer[lastBufferStart], &brain->weights[weightPointer], LAYER_SIZES[layer-1]);
 
             if (layer < LAYER_NUMBER-1) {
                 // apply ReLU in the hidden layers only
-                runBuffer[curBufferStart + neuron] = ReLU(runBuffer[curBufferStart + neuron]);
+                runBuffer[curBufferStart + neuron]
+                   = ReLU(brain->bias[layer - 1] + quickDotProduct(&runBuffer[lastBufferStart], &brain->weights[weightPointer], LAYER_SIZES[layer-1]));
+
             } else {
+                // last layer
+                runBuffer[curBufferStart + neuron]
+                   = brain->bias[layer - 1] + quickDotProduct(&runBuffer[lastBufferStart], &brain->weights[weightPointer], LAYER_SIZES[layer-1]);
+
                 if (runBuffer[curBufferStart + neuron] < outputMin) {
                     outputMin = runBuffer[curBufferStart + neuron];
                 }
@@ -133,16 +137,12 @@ inline void runNeuralNetwork(const double *inputs, NeuralNetwork *brain) {
 
             weightPointer += LAYER_SIZES[layer-1]; // go to the set of weights of the next neuron
         }
-
-        biasPointer++;
         swap(curBufferStart, lastBufferStart);
     }
 
     for (int i = 0; i < OUTPUT_SIZE; i++) { // normalize and load into output
         brain->output[i] = (runBuffer[lastBufferStart + i] - outputMin) / (outputMax - outputMin);
     }
-
-    // memcpy(brain->output, &runBuffer[lastBufferStart], LAYER_SIZES[LAYER_NUMBER-1] * sizeof(double)); // load results into output
 }
 
 inline int getBiggestOutputIndex(const NeuralNetwork *brain) {
@@ -254,7 +254,7 @@ inline void crossover(const gene* parent1, const gene* parent2) {
     }
 }
 
-constexpr double MUTATION_CHANCE = 0.3; // 0% - 100%
+constexpr double MUTATION_CHANCE = 0.25; // 0% - 100%
 inline void mutation() {
     for (int i = 0; i < GENE_NUMBER; i++) {
         for (int j = 0; j < GENE_DATA_BITS; j++) {
@@ -270,7 +270,6 @@ struct dna {
 };
 
 inline void generation(element* curGeneration, dna* lastGenerationBuffer) {
-
     double scoreSum = 0;
     for (int i = 0; i < POPULATION_SIZE; i++) {
         memcpy(&lastGenerationBuffer[i], curGeneration[i].dna, GENE_NUMBER * sizeof(gene));
@@ -288,8 +287,59 @@ inline void generation(element* curGeneration, dna* lastGenerationBuffer) {
 
         memcpy(curGeneration[i].dna, childDnaBuffer.dna, GENE_NUMBER * sizeof(gene)); // save result from buffer to the next generation
     }
+}
 
-    // OBS: the scores are NOT meant to be reset in generation(), since they will be overriden when running the neural network again
+constexpr int ELITE_SIZE = POPULATION_SIZE*0.1;
+inline void generationElitism(element* curGeneration, dna* lastGenerationBuffer) {
+    double scoreSum = 0;
+    int elite[ELITE_SIZE];
+
+    for (int i = 0; i < ELITE_SIZE; i++) {
+        elite[i] = i % POPULATION_SIZE;
+    }
+
+    for (int i = 0; i < POPULATION_SIZE; i++) {
+        memcpy(&lastGenerationBuffer[i], curGeneration[i].dna, GENE_NUMBER * sizeof(gene));
+
+        scoreSum += curGeneration[i].score;
+
+        if (curGeneration[i].score > curGeneration[elite[ELITE_SIZE - 1]].score) {
+            int j = ELITE_SIZE-1;
+            while (j >= 0 && curGeneration[elite[j]].score < curGeneration[i].score) {
+                j--;
+            }
+            j++;
+
+            if (i == elite[j]) continue;
+
+            for (int k = j+1; k < ELITE_SIZE; k++) {
+                elite[k] = elite[k - 1];
+            }
+            elite[j] = i;
+        }
+    }
+
+    static bool isElite = false;
+    for (int i = 0; i < POPULATION_SIZE; i++) {
+
+        isElite = false;
+        for (int j = 0; j < ELITE_SIZE; j++) {
+            if (elite[j] == i) {
+                isElite = true;
+                break;
+            }
+        }
+        if (isElite) continue;
+
+        crossover(
+            lastGenerationBuffer[roulette(curGeneration, scoreSum)].genes, // select parent1
+            lastGenerationBuffer[roulette(curGeneration, scoreSum)].genes  // select parent2
+        );
+
+        mutation();
+
+        memcpy(curGeneration[i].dna, childDnaBuffer.dna, GENE_NUMBER * sizeof(gene)); // save result from buffer to the next generation
+    }
 }
 
 // EVALUATION //
@@ -301,10 +351,7 @@ inline int findBest(const element* pop) {
             best = i;
         }
     }
-
     return best;
 }
-
-
 
 #endif // GENALGNEURALNETWORK_H
