@@ -32,7 +32,7 @@ static void runAndEvaluate(NeuralNetwork *brain, element *individual) {
     individual->score = totalScore;
 }
 
-constexpr int EPOCHS = 100;
+constexpr int EPOCHS = 6;
 
 int main() {
     srand(time(nullptr));
