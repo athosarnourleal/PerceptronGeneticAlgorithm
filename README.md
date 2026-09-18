@@ -1,4 +1,5 @@
 # Perceptron neural network ML system based in a evolutionary algorithm
+project made for educational purposes, mainly to study c++ and optimization
 
 ## architecture
 
@@ -17,3 +18,6 @@
 ### • population expression
 
 ### • genetic operators
+
+### future
+project will be revisited
