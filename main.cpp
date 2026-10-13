@@ -2,72 +2,77 @@
 #include "headers/genalgNeuralNetwork.h"
 #include "headers/mnistLoading.h"
 #include "headers/uploadData.h"
+#include <omp.h>
+#include <math.h>
 
 static const DataSet *trainingData;
+static NeuralNetwork *brain_buffer;
 
-static int elementCouter = 0; // DEBUG
+static int elementCounter = 0; // DEBUG
+static double totalScore, iterationError;
 
-static void runAndEvaluate(NeuralNetwork *brain, element *individual) {
-    std::cout << "running new element: " << elementCouter++ << '\n'; // DEBUG
+static void runAndEvaluate(element *individual) {
 
-    double totalScore = 0;
-    double iterationAvgError = 0;
+    if (elementCounter % 100 == 0) {
+        std::cout << "loading and running new element: " << elementCounter << '\n'; // DEBUG
+    }
+    elementCounter++;
 
-    for (int i = 0; i < TRAINING_BATCH_SIZE; i++) {
-        runNeuralNetwork(trainingData->trainingBatchImages[i], brain);
+    loadBrainFromDNA(brain_buffer, individual->dna);
+
+    totalScore = 0;
+
+    for (int trainingIteration = 0; trainingIteration < TRAINING_BATCH_SIZE; trainingIteration++) {
+        runNeuralNetwork(trainingData->trainingBatchImages[trainingIteration], brain_buffer);
+        iterationError = 0;
 
         for (int neuron = 0; neuron < OUTPUT_SIZE; neuron++) {
-            if (neuron == trainingData->trainingBatchLabels[i]) {
-                // right answer --> expects: 1
-                iterationAvgError += (brain->output[neuron] - 1) * (brain->output[neuron] - 1);
+            if (neuron == trainingData->trainingBatchLabels[trainingIteration]) {
+                // right answer --> expects: 1 --> error = (output - 1)²
+                iterationError += brain_buffer->output[neuron] * (brain_buffer->output[neuron] - 2) + 1;
             } else {
-                // wrong answer --> expects: 0
-                iterationAvgError += brain->output[neuron] * brain->output[neuron];
+                // wrong answer --> expects: 0 --> error = (output)²
+                iterationError += brain_buffer->output[neuron] * brain_buffer->output[neuron];
             }
-        }
 
-        totalScore += OUTPUT_SIZE / (iterationAvgError + OUTPUT_SIZE);
+            totalScore += OUTPUT_SIZE / (iterationError + OUTPUT_SIZE);
+        }
     }
 
     individual->score = totalScore;
 }
 
-constexpr int EPOCHS = 6;
+constexpr int EPOCHS = 40;
 
 int main() {
-    srand(time(nullptr));
+    rng.seed(42);
+
+    NUM_THREADS = omp_get_max_threads();
 
     trainingData = new DataSet;
 
+    brain_buffer = new NeuralNetwork;
     element* bestFromEachGeneration = new element[EPOCHS];
-
-    NeuralNetwork* brains = new NeuralNetwork[POPULATION_SIZE];
     dna* lastGenerationBuffer = new dna[POPULATION_SIZE];
     element* curGeneration = new element[POPULATION_SIZE];
     createPopulation(curGeneration);
 
     for (int epoch = 0; epoch < EPOCHS; epoch++) {
-        elementCouter = 0;
+        elementCounter = 0;
 
         // get batch
         std::cout << "gathering training batch" << '\n'; // DEBUG
         trainingData->assembleTrainingBatch();
 
-        // load brain
-        std::cout << "decoding brains" << '\n'; // DEBUG
-        for (int j = 0; j < POPULATION_SIZE; j++) {
-            loadBrainFromDNA(&brains[j], curGeneration[j].dna);
-        }
-
         // execute population
         std::cout << "executing population code" << '\n'; // DEBUG
         for (int j = 0; j < POPULATION_SIZE; j++) {
-            runAndEvaluate(&brains[j], curGeneration);
+            runAndEvaluate(curGeneration);
         }
 
         // generate next population
         std::cout << "generate next gen" << '\n'; // DEBUG
-        generation(curGeneration, lastGenerationBuffer);
+        generationElitism(curGeneration, lastGenerationBuffer);
 
         // get best from last generation
         const int bestElementIndex = findBest(curGeneration);
@@ -106,7 +111,7 @@ int main() {
 
     delete trainingData;
     delete [] curGeneration;
-    delete [] brains;
+    delete brain_buffer;
     delete [] lastGenerationBuffer;
     delete [] bestFromEachGeneration;
 

@@ -35,6 +35,7 @@ public:
     }
 
     void assembleTrainingBatch() const {
+        // #pragma omp parallel for
         for (int i = 0; i < TRAINING_BATCH_SIZE; i++) {
             const int chosen = randomInt(TRAINING_BATCH_SIZE);
             trainingBatchLabels[i] = dataSetLabels[chosen]; // store label
@@ -60,7 +61,7 @@ private:
     void loadData() const {
         std::ifstream file(trainingDataFileName);
         if (file.is_open() == false) {
-            std::cerr << "file não foi encontrada ou não pode ser aberta" << '\n';
+            std::cerr << "mnistLoadingError: Arquivo de trainingData não foi encontrado ou não pode ser aberto" << '\n';
             exit(404);
         }
 
@@ -92,7 +93,7 @@ private:
     void getDataDimensions() {
         std::ifstream file(trainingDataFileName);
         if (file.is_open() == false) {
-            std::cerr << "Arquivo não foi encontrado ou não pode ser aberto" << '\n';
+            std::cerr << "mnistLoadingError: Arquivo de trainingData não foi encontrado ou não pode ser aberto" << '\n';
             exit(404);
         }
 
@@ -100,7 +101,7 @@ private:
 
         getline(file, line); // get header
 
-        imageSize = std::count(line.begin(), line.end(), ',');
+        imageSize = std::ranges::count(line, ',');
 
         dataSetSize = 0;
         while (getline(file, line)) {

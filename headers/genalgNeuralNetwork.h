@@ -3,10 +3,14 @@
 
 #include <cassert>
 #include <cstdlib>
+// #include <omp.h>
 #include <cstring>
 #include <iostream>
+#include <random>
 
 // --------------------------------------------------------------------------------------------------------------------- UTIL
+
+static int NUM_THREADS = 1;
 
 constexpr int absCompileTime(const int n) {
     if (n < 0) return -n;
@@ -32,16 +36,18 @@ inline void swap(int &x, int &y) noexcept {
     x = y ^ x;
 }
 
-// random number generating // TODO: update random engine later
+
+static std::mt19937 rng;
+
 inline int randomInt() {
-    return rand();
+    return rng();
 }
 inline int randomInt(const int &range) {
-    return rand() % range;
+    return rng() % range;
 }
 constexpr double INVERSE_RAND_MAX = 4.65661e-10;
 inline double randomDouble() {
-    return rand() * INVERSE_RAND_MAX;
+    return rng() * INVERSE_RAND_MAX;
 }
 
 // --------------------------------------------------------------------------------------------------------------------- NEURAL NETWORK
@@ -49,16 +55,6 @@ inline double randomDouble() {
 constexpr int LAYER_SIZES[] = {28*28, 16, 16, 10};
 constexpr int LAYER_NUMBER = 4;
 constexpr int OUTPUT_SIZE = LAYER_SIZES[LAYER_NUMBER-1];
-
-constexpr int calculateWeightNumber() {
-    int weightNum = 0;
-
-    for (int i = 1; i < LAYER_NUMBER; i++) {
-        weightNum += LAYER_SIZES[i]*LAYER_SIZES[i-1];
-    }
-
-    return weightNum;
-}
 
 constexpr int getBiggestLayerSize() {
     int size = 0;
@@ -74,7 +70,27 @@ constexpr int getBiggestLayerSize() {
 
 constexpr int BIGGEST_LAYER_SIZE = getBiggestLayerSize();
 
-constexpr int WEIGHT_NUMBER = calculateWeightNumber(), BIAS_NUMBER = LAYER_NUMBER-1;
+constexpr int calculateWeightNumber() {
+    int weightNum = 0;
+
+    for (int i = 1; i < LAYER_NUMBER; i++) {
+        weightNum += LAYER_SIZES[i]*LAYER_SIZES[i-1];
+    }
+
+    return weightNum;
+}
+
+constexpr int calculateBiasNumber() {
+    int biasNum = 0;
+
+    for (int i = 1; i < LAYER_NUMBER; i++) {
+        biasNum += LAYER_SIZES[i];
+    }
+
+    return biasNum;
+}
+
+constexpr int WEIGHT_NUMBER = calculateWeightNumber(), BIAS_NUMBER = calculateBiasNumber();
 
 static double runBuffer[BIGGEST_LAYER_SIZE * 2];
 
@@ -84,55 +100,98 @@ struct NeuralNetwork {
     double output[LAYER_SIZES[LAYER_NUMBER-1]];
 };
 
-inline double dotProductUnroll2(const double* vector1, const  double* vector2, const int size) {
-    double sum1 = 0.0;// uses two cores automatically(in theory...)
-    double sum2 = 0.0;
+inline double dotProduct(const double* vector1, const  double* vector2, const int size) {
+    double sum = 0.0;
 
-    for (int i = 0; i < size; i+=2) {
-        sum1 += vector1[i] * vector2[i];
-        sum2 += vector1[i+1] * vector2[i+1];
+    for (int i = 0; i < size; i++) {
+        sum += vector1[i] * vector2[i];
     }
-
-    return sum1 + sum2;
+    return sum;
 }
 
-inline double quickDotProduct(const double* vector1, const  double* vector2, const int size) {
-    if (size % 2 == 0) return dotProductUnroll2(vector1, vector2, size);
-
-    return dotProductUnroll2(vector1, vector2, size-1) + vector1[size-1]*vector2[size-1];
-}
 
 inline double ReLU(const double u) {
     return (u > 0) * u; // calculates "(u > 0) ? u : -0";
 }
 
+static int curBufferStart, lastBufferStart, weightPointer, biasPointer;
+
+// inline double memcpyDouble_p(
+//     double* __restrict __dest,
+//     const double* __restrict __src,
+//     size_t __n) {
+//
+//     size_t i = __n;
+//     for (size_t i = __n) {
+//
+//     }
+// } TODO
+
 inline void runNeuralNetwork(const double *inputs, NeuralNetwork *brain) {
     memcpy(runBuffer, inputs, LAYER_SIZES[0] * sizeof(double)); // load input into buffer
 
-    int weightPointer = 0;
-    int curBufferStart = BIGGEST_LAYER_SIZE, lastBufferStart = 0; // selects which half of the buffer is used
+    weightPointer = 0;
+    curBufferStart = BIGGEST_LAYER_SIZE;
+    lastBufferStart = 0;
 
-    double outputMin = 0, outputMax = 0;
+
     // run
     for (int layer = 1; layer < LAYER_NUMBER; layer++) {
+        // #pragma omp paralel for
         for (int neuron = 0; neuron < LAYER_SIZES[layer]; neuron++) {
 
-            if (layer < LAYER_NUMBER-1) {
-                // apply ReLU in the hidden layers only
-                runBuffer[curBufferStart + neuron]
-                   = ReLU(brain->bias[layer - 1] + quickDotProduct(&runBuffer[lastBufferStart], &brain->weights[weightPointer], LAYER_SIZES[layer-1]));
+            runBuffer[curBufferStart + neuron]
+               = brain->bias[layer - 1] + dotProduct(&runBuffer[lastBufferStart], &brain->weights[weightPointer], LAYER_SIZES[layer-1]);
 
-            } else {
+            if (layer < LAYER_NUMBER-1) {
+                // last layer
+                runBuffer[curBufferStart + neuron] = ReLU(runBuffer[curBufferStart + neuron]);
+            }
+        }
+        swap(curBufferStart, lastBufferStart);
+    }
+
+    double outputMin = 0, outputMax = 0;
+    for (int neuron = 0; neuron < LAYER_SIZES[LAYER_NUMBER-1]; neuron++) {
+        if (runBuffer[curBufferStart + neuron] < outputMin) {
+            outputMin = runBuffer[curBufferStart + neuron];
+        } else if (runBuffer[curBufferStart + neuron] > outputMax) {
+            outputMax = runBuffer[curBufferStart + neuron];
+        }
+    }
+
+    for (int i = 0; i < OUTPUT_SIZE; i++) { // normalize and load into output
+        brain->output[i] = (runBuffer[lastBufferStart + i] - outputMin) / (outputMax - outputMin);
+    }
+}
+inline void runNeuralNetwork2(const double *inputs, NeuralNetwork *brain) {
+    memcpy(runBuffer, inputs, LAYER_SIZES[0] * sizeof(double)); // load input into buffer
+
+    weightPointer = 0;
+    curBufferStart = BIGGEST_LAYER_SIZE;
+    lastBufferStart = 0;
+
+    double outputMin = 0, outputMax = 0;
+
+    // run
+    for (int layer = 1; layer < LAYER_NUMBER; layer++) {
+        
+        for (int neuron = 0; neuron < LAYER_SIZES[layer]; neuron++) {
+
+            if (layer >= LAYER_NUMBER-1) {
                 // last layer
                 runBuffer[curBufferStart + neuron]
-                   = brain->bias[layer - 1] + quickDotProduct(&runBuffer[lastBufferStart], &brain->weights[weightPointer], LAYER_SIZES[layer-1]);
+                   = brain->bias[layer - 1] + dotProduct(&runBuffer[lastBufferStart], &brain->weights[weightPointer], LAYER_SIZES[layer-1]);
 
                 if (runBuffer[curBufferStart + neuron] < outputMin) {
                     outputMin = runBuffer[curBufferStart + neuron];
-                }
-                if (runBuffer[curBufferStart + neuron] > outputMax) {
+                } else if (runBuffer[curBufferStart + neuron] > outputMax) {
                     outputMax = runBuffer[curBufferStart + neuron];
                 }
+            } else {
+                // apply ReLU in the hidden layers only
+                runBuffer[curBufferStart + neuron]
+                   = ReLU(brain->bias[layer - 1] + dotProduct(&runBuffer[lastBufferStart], &brain->weights[weightPointer], LAYER_SIZES[layer-1]));
             }
 
             weightPointer += LAYER_SIZES[layer-1]; // go to the set of weights of the next neuron
@@ -157,7 +216,6 @@ inline int getBiggestOutputIndex(const NeuralNetwork *brain) {
 
 // --------------------------------------------------------------------------------------------------------------------- GENALG
 
-
 // GENETIC MANIPULATION //
 
 constexpr int GENE_NUMBER = WEIGHT_NUMBER + BIAS_NUMBER; // number of genes
@@ -165,8 +223,9 @@ constexpr int GENE_NUMBER = WEIGHT_NUMBER + BIAS_NUMBER; // number of genes
 constexpr int GENE_DATA_BITS = 8; // {   0 < GENE_DATA_BITS < 9   }
 constexpr int GENE_CAPACITY = powCompileTime(2, GENE_DATA_BITS);
 
-constexpr double MIN_WEIGHT_VAL = -10, MAX_WEIGHT_VAL = 10; // values for translation
-constexpr double MIN_BIAS_VAL = -10, MAX_BIAS_VAL = 10; // values for translation
+// values for translation
+constexpr double MIN_WEIGHT_VAL = -10, MAX_WEIGHT_VAL = 10;
+constexpr double MIN_BIAS_VAL = -10, MAX_BIAS_VAL = 10;
 
 struct gene {
     unsigned char data : GENE_DATA_BITS;
@@ -180,10 +239,12 @@ inline double decodeGeneValue(const gene gene, const double min, const double ma
 
 inline void loadBrainFromDNA(NeuralNetwork *brain, const gene* dna) {
     int dnaCounter = 0;
-    for (int i = 0; i < WEIGHT_NUMBER; i++) { // load into weights
+
+    for (int i = 0; i < WEIGHT_NUMBER; i++) { // load weights
         brain->weights[i] = decodeGeneValue(dna[dnaCounter++], MIN_WEIGHT_VAL, MAX_WEIGHT_VAL);
     }
-    for (int i = 0; i < BIAS_NUMBER; i++) { // load into weights
+
+    for (int i = 0; i < BIAS_NUMBER; i++) { // load biases
         brain->bias[i] = decodeGeneValue(dna[dnaCounter++], MIN_BIAS_VAL, MAX_BIAS_VAL);
     }
 }
@@ -241,6 +302,7 @@ inline void crossover(const gene* parent1, const gene* parent2) {
     const int cutBit = cut% GENE_DATA_BITS;
     const int cutBitFromRight = GENE_DATA_BITS - cutBit;
 
+    #pragma omp parallel for
     for (int i = 0; i < GENE_NUMBER; i++) {
         if (i < cutGene) {
             childDnaBuffer.dna[i] = parent1[i];
@@ -254,7 +316,7 @@ inline void crossover(const gene* parent1, const gene* parent2) {
     }
 }
 
-constexpr double MUTATION_CHANCE = 0.25; // 0% - 100%
+constexpr double MUTATION_CHANCE = 0.08; // 0% - 100%
 inline void mutation() {
     for (int i = 0; i < GENE_NUMBER; i++) {
         for (int j = 0; j < GENE_DATA_BITS; j++) {
@@ -289,11 +351,12 @@ inline void generation(element* curGeneration, dna* lastGenerationBuffer) {
     }
 }
 
-constexpr int ELITE_SIZE = POPULATION_SIZE*0.1;
+constexpr int ELITE_SIZE = POPULATION_SIZE*0.2;
 inline void generationElitism(element* curGeneration, dna* lastGenerationBuffer) {
     double scoreSum = 0;
     int elite[ELITE_SIZE];
 
+    #pragma omp parallel for
     for (int i = 0; i < ELITE_SIZE; i++) {
         elite[i] = i % POPULATION_SIZE;
     }
