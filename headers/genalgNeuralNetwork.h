@@ -2,8 +2,6 @@
 #define GENALGNEURALNETWORK_H
 
 #include <cassert>
-#include <cstdlib>
-// #include <omp.h>
 #include <cstring>
 #include <iostream>
 #include <random>
@@ -175,7 +173,7 @@ inline void runNeuralNetwork2(const double *inputs, NeuralNetwork *brain) {
 
     // run
     for (int layer = 1; layer < LAYER_NUMBER; layer++) {
-        
+
         for (int neuron = 0; neuron < LAYER_SIZES[layer]; neuron++) {
 
             if (layer >= LAYER_NUMBER-1) {
@@ -302,7 +300,6 @@ inline void crossover(const gene* parent1, const gene* parent2) {
     const int cutBit = cut% GENE_DATA_BITS;
     const int cutBitFromRight = GENE_DATA_BITS - cutBit;
 
-    #pragma omp parallel for
     for (int i = 0; i < GENE_NUMBER; i++) {
         if (i < cutGene) {
             childDnaBuffer.dna[i] = parent1[i];
@@ -356,7 +353,6 @@ inline void generationElitism(element* curGeneration, dna* lastGenerationBuffer)
     double scoreSum = 0;
     int elite[ELITE_SIZE];
 
-    #pragma omp parallel for
     for (int i = 0; i < ELITE_SIZE; i++) {
         elite[i] = i % POPULATION_SIZE;
     }
